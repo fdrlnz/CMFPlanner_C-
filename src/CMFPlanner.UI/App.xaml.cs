@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using CMFPlanner.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CMFPlanner.UI;
@@ -15,6 +17,10 @@ public partial class App : Application
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
 
+        // Discover and load plugins from the plugins/ directory next to the executable.
+        var pluginManager = Services.GetRequiredService<PluginManager>();
+        pluginManager.DiscoverAndLoad();
+
         var mainWindow = Services.GetRequiredService<MainWindow>();
         mainWindow.Show();
     }
@@ -23,6 +29,10 @@ public partial class App : Application
     {
         // UI
         services.AddSingleton<MainWindow>();
+
+        // Plugin system
+        var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
+        services.AddSingleton(new PluginManager(pluginsDir));
 
         // Core services will be registered here as they are implemented
         // e.g. services.AddSingleton<ISessionState, SessionState>();

@@ -1,0 +1,6 @@
+{
+  "name": "Sample Visualization Plugin",
+  "version": "1.0.0",
+  "author": "CMF Planner Team",
+  "description": "Demonstrates the MEF plugin architecture. Replace with a real visualization plugin."
+}

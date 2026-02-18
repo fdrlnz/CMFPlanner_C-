@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SampleVisualizationPlugin</AssemblyName>
+    <!-- Output directly into the app's plugins directory so the plugin is ready to load on build -->
+    <OutputPath>..\..\src\CMFPlanner.UI\bin\$(Configuration)\$(TargetFramework)\plugins\SampleVisualizationPlugin\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only the attributed model is needed; hosting lives in CMFPlanner.Plugins -->
+    <PackageReference Include="System.Composition.AttributedModel" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference interfaces only; do not copy CMFPlanner assemblies into the plugin dir -->
+    <ProjectReference Include="..\..\src\CMFPlanner.Plugins\CMFPlanner.Plugins.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="plugin.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

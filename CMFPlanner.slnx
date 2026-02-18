@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/plugins/">
+    <Project Path="plugins/SampleVisualizationPlugin/SampleVisualizationPlugin.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/CMFPlanner.Core/CMFPlanner.Core.csproj" />
     <Project Path="src/CMFPlanner.Dicom/CMFPlanner.Dicom.csproj" />
