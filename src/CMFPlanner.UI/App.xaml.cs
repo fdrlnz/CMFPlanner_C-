@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -34,7 +35,7 @@ public partial class App : Application
         var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
         services.AddSingleton(new PluginManager(pluginsDir));
 
-        // Core services will be registered here as they are implemented
-        // e.g. services.AddSingleton<ISessionState, SessionState>();
+        // DICOM loading
+        services.AddSingleton<IDicomLoader, DicomLoader>();
     }
 }

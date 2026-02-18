@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using CMFPlanner.Core.Models;
+using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
 
 namespace CMFPlanner.UI;
@@ -9,6 +11,8 @@ namespace CMFPlanner.UI;
 public partial class MainWindow : Window
 {
     private readonly PluginManager _pluginManager;
+    private readonly IDicomLoader  _dicomLoader;
+    private DicomVolume?           _currentVolume;
 
     // Workflow step definitions — order matches the clinical workflow.
     private static readonly (string Title, string Description)[] Steps =
@@ -24,9 +28,10 @@ public partial class MainWindow : Window
         ("Export",            "STL files and PDF report"),
     ];
 
-    public MainWindow(PluginManager pluginManager)
+    public MainWindow(PluginManager pluginManager, IDicomLoader dicomLoader)
     {
         _pluginManager = pluginManager;
+        _dicomLoader   = dicomLoader;
         InitializeComponent();
         Loaded += OnLoaded;
     }
@@ -39,12 +44,77 @@ public partial class MainWindow : Window
         RefreshStatusBar();
     }
 
+    // ── Open DICOM ─────────────────────────────────────────────────────────
+
+    private async void OpenDicom_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select DICOM Series Folder",
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        await LoadDicomFolderAsync(dialog.FolderName);
+    }
+
+    private async Task LoadDicomFolderAsync(string folderPath)
+    {
+        LoadingOverlay.Visibility = Visibility.Visible;
+        LoadingProgress.IsIndeterminate = true;
+        LoadingText.Text = "Scanning DICOM files…";
+        StatusActiveTool.Text = "Loading…";
+        StatusMeasurements.Text = string.Empty;
+        StatusMessages.Text = string.Empty;
+
+        var progress = new Progress<(int Done, int Total)>(p =>
+        {
+            LoadingProgress.IsIndeterminate = false;
+            LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
+            LoadingText.Text = $"Reading file {p.Done} of {p.Total}…";
+        });
+
+        try
+        {
+            _currentVolume = await _dicomLoader.LoadSeriesAsync(folderPath, progress);
+
+            StatusActiveTool.Text = "Ready";
+            StatusMeasurements.Text =
+                $"{_currentVolume.PatientName}  ·  {FormatStudyDate(_currentVolume.StudyDate)}  ·  {_currentVolume.Modality}";
+            StatusMessages.Text =
+                $"{_currentVolume.SliceCount} slices  {_currentVolume.Rows}×{_currentVolume.Columns}  " +
+                $"{_currentVolume.PixelSpacingX:F3}×{_currentVolume.PixelSpacingY:F3}×{_currentVolume.SliceThickness:F3} mm";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusActiveTool.Text = "Load cancelled";
+        }
+        catch (Exception ex)
+        {
+            StatusActiveTool.Text = "Load failed";
+            StatusMessages.Text = ex.Message;
+            MessageBox.Show(ex.Message, "DICOM Load Error",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static string FormatStudyDate(string raw)
+    {
+        // DICOM date: YYYYMMDD → YYYY-MM-DD
+        if (raw.Length == 8 && raw.All(char.IsDigit))
+            return $"{raw[..4]}-{raw[4..6]}-{raw[6..]}";
+        return raw;
+    }
+
     // ── Workflow step list ─────────────────────────────────────────────────
 
     private void PopulateWorkflowSteps()
     {
         var separatorColor = Color.FromRgb(0x3E, 0x3E, 0x42);
-        var textColor      = Color.FromRgb(0xCC, 0xCC, 0xCC);
         var subtleColor    = Color.FromRgb(0x85, 0x85, 0x85);
         var badgeColor     = Color.FromRgb(0x3E, 0x3E, 0x42);
 
@@ -53,7 +123,6 @@ public partial class MainWindow : Window
             var (title, description) = Steps[i];
             int number = i + 1;
 
-            // Row container
             var item = new Border
             {
                 Background      = Brushes.Transparent,
@@ -67,7 +136,6 @@ public partial class MainWindow : Window
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            // Step-number badge
             var badge = new Border
             {
                 Width               = 20,
@@ -87,15 +155,14 @@ public partial class MainWindow : Window
             };
             Grid.SetColumn(badge, 0);
 
-            // Step title + description
             var textStack = new StackPanel();
             textStack.Children.Add(new TextBlock
             {
-                Text           = title,
-                Foreground     = new SolidColorBrush(subtleColor),   // greyed out until step is available
-                FontSize       = 12,
-                FontWeight     = FontWeights.SemiBold,
-                TextWrapping   = TextWrapping.NoWrap,
+                Text         = title,
+                Foreground   = new SolidColorBrush(subtleColor),
+                FontSize     = 12,
+                FontWeight   = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.NoWrap,
             });
             textStack.Children.Add(new TextBlock
             {
@@ -133,7 +200,6 @@ public partial class MainWindow : Window
     {
         bool show = MenuToggleWorkflow.IsChecked;
         LeftPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        // Also collapse the adjacent splitter column
         LeftColumn.Width = show ? new GridLength(200) : new GridLength(0);
     }
 

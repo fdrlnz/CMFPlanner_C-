@@ -107,7 +107,7 @@
               Background="#2D2D2D" Foreground="#CCCCCC"
               BorderThickness="0,0,0,1" BorderBrush="#3E3E42">
             <MenuItem Header="_File" Foreground="#CCCCCC">
-                <MenuItem Header="Open DICOM Series…" InputGestureText="Ctrl+D"/>
+                <MenuItem Header="Open DICOM Series…" InputGestureText="Ctrl+D" Click="OpenDicom_Click"/>
                 <Separator/>
                 <MenuItem Header="Open Project…"      InputGestureText="Ctrl+O"/>
                 <MenuItem Header="Save Project"       InputGestureText="Ctrl+S"/>
@@ -142,6 +142,7 @@
 
                 <!-- Open DICOM -->
                 <Button Style="{StaticResource ToolbarActionButton}"
+                        Click="OpenDicom_Click"
                         ToolTip="Open a DICOM CT/CBCT series folder (Ctrl+D)">
                     Open DICOM
                 </Button>
@@ -258,6 +259,29 @@
                                    ShowFrameRate="False">
                 <helix:SunLight/>
             </helix:HelixViewport3D>
+
+            <!-- ── Loading overlay (shown during DICOM load) ─────── -->
+            <Grid x:Name="LoadingOverlay"
+                  Grid.Column="2"
+                  Visibility="Collapsed"
+                  Panel.ZIndex="10"
+                  Background="#CC1E1E1E">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <ProgressBar x:Name="LoadingProgress"
+                                 Width="280" Height="4"
+                                 Minimum="0" Maximum="100"
+                                 IsIndeterminate="True"
+                                 Foreground="#0078D4"
+                                 Background="#3E3E42"/>
+                    <TextBlock x:Name="LoadingText"
+                               Text="Loading DICOM series…"
+                               Foreground="#CCCCCC"
+                               FontSize="12"
+                               HorizontalAlignment="Center"
+                               Margin="0,10,0,0"/>
+                </StackPanel>
+            </Grid>
 
             <!-- ── Splitter: center | right ──────────────────────── -->
             <GridSplitter Grid.Column="3"
