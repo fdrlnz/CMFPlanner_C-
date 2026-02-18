@@ -1,12 +1,297 @@
-﻿<Window x:Class="CMFPlanner.UI.MainWindow"
+<Window x:Class="CMFPlanner.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:CMFPlanner.UI"
+        xmlns:helix="http://helix-toolkit.org/wpf"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="CMF Planner v1.0"
+        MinWidth="1280" MinHeight="720"
+        Width="1440" Height="900"
+        WindowStartupLocation="CenterScreen"
+        Background="#1E1E1E"
+        Foreground="#CCCCCC"
+        FontFamily="Segoe UI"
+        FontSize="12">
 
-    </Grid>
+    <Window.Resources>
+        <!-- ── Shared brushes ─────────────────────────────────────── -->
+        <SolidColorBrush x:Key="PanelBrush"     Color="#252526"/>
+        <SolidColorBrush x:Key="ToolbarBrush"   Color="#2D2D2D"/>
+        <SolidColorBrush x:Key="AccentBrush"    Color="#0078D4"/>
+        <SolidColorBrush x:Key="TextBrush"      Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="SubtleBrush"    Color="#858585"/>
+        <SolidColorBrush x:Key="SeparatorBrush" Color="#3E3E42"/>
+
+        <!-- ── Toolbar regular action button ─────────────────────── -->
+        <Style x:Key="ToolbarActionButton" TargetType="Button">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Foreground"      Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="12,8"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4E4E52"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Persistent toggle button (NHP / Soft Tissue / Bite Ref) ── -->
+        <Style x:Key="PersistentToggle" TargetType="ToggleButton">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Foreground"      Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush"     Value="#3E3E42"/>
+            <Setter Property="Padding"         Value="12,6"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background"  Value="#0078D4"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked"    Value="True"/>
+                                    <Condition Property="IsMouseOver"  Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="#1084D8"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ══════════════════════════════════════════════════════════
+             MENU BAR
+             ══════════════════════════════════════════════════════════ -->
+        <Menu DockPanel.Dock="Top"
+              Background="#2D2D2D" Foreground="#CCCCCC"
+              BorderThickness="0,0,0,1" BorderBrush="#3E3E42">
+            <MenuItem Header="_File" Foreground="#CCCCCC">
+                <MenuItem Header="Open DICOM Series…" InputGestureText="Ctrl+D"/>
+                <Separator/>
+                <MenuItem Header="Open Project…"      InputGestureText="Ctrl+O"/>
+                <MenuItem Header="Save Project"       InputGestureText="Ctrl+S"/>
+                <MenuItem Header="Save Project As…"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Click="MenuExit_Click"/>
+            </MenuItem>
+            <MenuItem Header="_View" Foreground="#CCCCCC">
+                <MenuItem x:Name="MenuToggleWorkflow"
+                          Header="Workflow Panel"
+                          IsCheckable="True" IsChecked="True"
+                          Click="MenuToggleWorkflow_Click"/>
+                <MenuItem x:Name="MenuToggleProperties"
+                          Header="Properties Panel"
+                          IsCheckable="True" IsChecked="True"
+                          Click="MenuToggleProperties_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Help" Foreground="#CCCCCC">
+                <MenuItem Header="About CMF Planner…"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- ══════════════════════════════════════════════════════════
+             TOOLBAR
+             ══════════════════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Top"
+                Background="#2D2D2D" Height="44"
+                BorderThickness="0,0,0,1" BorderBrush="#3E3E42">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="6,0">
+
+                <!-- Open DICOM -->
+                <Button Style="{StaticResource ToolbarActionButton}"
+                        ToolTip="Open a DICOM CT/CBCT series folder (Ctrl+D)">
+                    Open DICOM
+                </Button>
+
+                <!-- Separator -->
+                <Rectangle Width="1" Fill="#3E3E42" Margin="8,8"/>
+
+                <!-- NHP — always visible -->
+                <ToggleButton x:Name="BtnNhp"
+                              Style="{StaticResource PersistentToggle}"
+                              Margin="2,0"
+                              ToolTip="Natural Head Position — orient skull for all measurements">
+                    NHP
+                </ToggleButton>
+
+                <!-- Soft Tissue — always visible -->
+                <ToggleButton x:Name="BtnSoftTissue"
+                              Style="{StaticResource PersistentToggle}"
+                              Margin="2,0"
+                              ToolTip="Toggle soft tissue overlay (geometric approximation)">
+                    Soft Tissue
+                </ToggleButton>
+
+                <!-- Bite Ref — always visible -->
+                <ToggleButton x:Name="BtnBiteRef"
+                              Style="{StaticResource PersistentToggle}"
+                              Margin="2,0"
+                              ToolTip="Toggle bite reference overlay">
+                    Bite Ref
+                </ToggleButton>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════
+             STATUS BAR
+             ══════════════════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Bottom"
+                Background="#252526" Height="24"
+                BorderThickness="0,1,0,0" BorderBrush="#3E3E42">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Active tool -->
+                <TextBlock x:Name="StatusActiveTool" Grid.Column="0"
+                           Text="Ready"
+                           Foreground="#CCCCCC"
+                           VerticalAlignment="Center"
+                           Margin="10,0"/>
+
+                <!-- Measurements (centre) -->
+                <TextBlock x:Name="StatusMeasurements" Grid.Column="1"
+                           Foreground="#CCCCCC"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+
+                <!-- Info / errors (right) -->
+                <TextBlock x:Name="StatusMessages" Grid.Column="2"
+                           Foreground="#858585"
+                           VerticalAlignment="Center"
+                           Margin="10,0"/>
+            </Grid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════
+             MAIN CONTENT  ( left panel | splitter | 3D | splitter | right panel )
+             ══════════════════════════════════════════════════════════ -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LeftColumn"  Width="200" MinWidth="140"/>
+                <ColumnDefinition                       Width="3"/>
+                <ColumnDefinition                       Width="*"   MinWidth="400"/>
+                <ColumnDefinition                       Width="3"/>
+                <ColumnDefinition x:Name="RightColumn" Width="250" MinWidth="180"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left: Workflow Steps ──────────────────────────── -->
+            <Border x:Name="LeftPanel" Grid.Column="0" Background="#252526">
+                <DockPanel>
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top"
+                            Background="#2D2D2D" Padding="12,7"
+                            BorderThickness="0,0,0,1" BorderBrush="#3E3E42">
+                        <TextBlock Text="WORKFLOW"
+                                   Foreground="#858585"
+                                   FontSize="10" FontWeight="SemiBold"/>
+                    </Border>
+
+                    <!-- Step list (populated from code-behind) -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="WorkflowStepsPanel" Margin="0,4,0,8"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- ── Splitter: left | center ───────────────────────── -->
+            <GridSplitter Grid.Column="1"
+                          Width="3" Background="#3E3E42"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"/>
+
+            <!-- ── Center: 3D Viewport ───────────────────────────── -->
+            <helix:HelixViewport3D Grid.Column="2"
+                                   x:Name="Viewport3D"
+                                   Background="#1E1E1E"
+                                   ShowCoordinateSystem="True"
+                                   ShowFrameRate="False">
+                <helix:SunLight/>
+            </helix:HelixViewport3D>
+
+            <!-- ── Splitter: center | right ──────────────────────── -->
+            <GridSplitter Grid.Column="3"
+                          Width="3" Background="#3E3E42"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"/>
+
+            <!-- ── Right: Properties Panel ───────────────────────── -->
+            <Border x:Name="RightPanel" Grid.Column="4" Background="#252526">
+                <DockPanel>
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top"
+                            Background="#2D2D2D" Padding="12,7"
+                            BorderThickness="0,0,0,1" BorderBrush="#3E3E42">
+                        <TextBlock Text="PROPERTIES"
+                                   Foreground="#858585"
+                                   FontSize="10" FontWeight="SemiBold"/>
+                    </Border>
+
+                    <!-- Context-sensitive content (populated per active tool) -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="8">
+                        <StackPanel x:Name="PropertiesPanel">
+                            <TextBlock Text="No tool active."
+                                       Foreground="#858585"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,20"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </DockPanel>
 </Window>
