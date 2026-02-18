@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CMFPlanner.Core/CMFPlanner.Core.csproj" />
+    <Project Path="src/CMFPlanner.Dicom/CMFPlanner.Dicom.csproj" />
+    <Project Path="src/CMFPlanner.Planning/CMFPlanner.Planning.csproj" />
+    <Project Path="src/CMFPlanner.Plugins/CMFPlanner.Plugins.csproj" />
+    <Project Path="src/CMFPlanner.Segmentation/CMFPlanner.Segmentation.csproj" />
+    <Project Path="src/CMFPlanner.Splint/CMFPlanner.Splint.csproj" />
+    <Project Path="src/CMFPlanner.UI/CMFPlanner.UI.csproj" />
+    <Project Path="src/CMFPlanner.Visualization/CMFPlanner.Visualization.csproj" />
+  </Folder>
+</Solution>

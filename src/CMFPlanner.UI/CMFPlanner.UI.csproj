@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
+    <PackageReference Include="MaterialDesignThemes" Version="5.3.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CMFPlanner.Core\CMFPlanner.Core.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Dicom\CMFPlanner.Dicom.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Segmentation\CMFPlanner.Segmentation.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Visualization\CMFPlanner.Visualization.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Planning\CMFPlanner.Planning.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Splint\CMFPlanner.Splint.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Plugins\CMFPlanner.Plugins.csproj" />
+  </ItemGroup>
+
+</Project>
