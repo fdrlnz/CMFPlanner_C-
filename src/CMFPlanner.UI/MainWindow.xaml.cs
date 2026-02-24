@@ -2,23 +2,29 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using CMFPlanner.Core.Models;
 using CMFPlanner.Core.Session;
 using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
 using CMFPlanner.Visualization;
+using HelixToolkit.Wpf;
 
 namespace CMFPlanner.UI;
 
 public partial class MainWindow : Window
 {
-    private readonly PluginManager  _pluginManager;
-    private readonly IDicomLoader   _dicomLoader;
-    private readonly ISessionState  _sessionState;
-    private readonly IVolumeBuilder _volumeBuilder;
+    private readonly PluginManager   _pluginManager;
+    private readonly IDicomLoader    _dicomLoader;
+    private readonly ISessionState   _sessionState;
+    private readonly IVolumeBuilder  _volumeBuilder;
+    private readonly IMeshExtractor  _meshExtractor;
 
     private DicomVolume? _currentVolume;
     private VolumeData?  _volumeData;
+
+    // Bone isovalue in Hounsfield Units.
+    private const short BoneThreshold = 400;
 
     // Workflow step definitions — order matches the clinical workflow.
     private static readonly (string Title, string Description)[] Steps =
@@ -35,15 +41,17 @@ public partial class MainWindow : Window
     ];
 
     public MainWindow(
-        PluginManager  pluginManager,
-        IDicomLoader   dicomLoader,
-        ISessionState  sessionState,
-        IVolumeBuilder volumeBuilder)
+        PluginManager   pluginManager,
+        IDicomLoader    dicomLoader,
+        ISessionState   sessionState,
+        IVolumeBuilder  volumeBuilder,
+        IMeshExtractor  meshExtractor)
     {
         _pluginManager = pluginManager;
         _dicomLoader   = dicomLoader;
         _sessionState  = sessionState;
         _volumeBuilder = volumeBuilder;
+        _meshExtractor = meshExtractor;
         InitializeComponent();
         Loaded += OnLoaded;
     }
@@ -107,6 +115,21 @@ public partial class MainWindow : Window
 
             _volumeData = await _volumeBuilder.BuildAsync(_currentVolume, phase2);
             _sessionState.VolumeData = _volumeData;
+
+            // ── Phase 3: marching cubes → bone mesh ───────────────────────
+
+            LoadingProgress.IsIndeterminate = true;
+            LoadingText.Text = "Extracting bone surface…";
+
+            var phase3 = new Progress<(int Done, int Total)>(p =>
+            {
+                LoadingProgress.IsIndeterminate = false;
+                LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
+                LoadingText.Text = $"Marching cubes row {p.Done} of {p.Total}…";
+            });
+
+            var meshData = await _meshExtractor.ExtractAsync(_volumeData, BoneThreshold, 2, phase3);
+            DisplayBoneMesh(meshData);
 
             // ── Update status bar ─────────────────────────────────────────
 
@@ -223,6 +246,57 @@ public partial class MainWindow : Window
         StatusMessages.Text = count > 0
             ? $"{count} plugin{(count == 1 ? "" : "s")} loaded"
             : string.Empty;
+    }
+
+    // ── 3D viewport ────────────────────────────────────────────────────────
+
+    private void DisplayBoneMesh(MeshData data)
+    {
+        if (data.VertexCount == 0) return;
+
+        // Build WPF MeshGeometry3D from flat arrays.
+        var geometry = new MeshGeometry3D();
+
+        var positions = geometry.Positions = new Point3DCollection(data.VertexCount);
+        var normals   = geometry.Normals   = new Vector3DCollection(data.VertexCount);
+        var indices   = geometry.TriangleIndices = new Int32Collection(data.Indices.Length);
+
+        float[] p = data.Positions;
+        float[] n = data.Normals;
+        int count = data.VertexCount;
+
+        for (int i = 0; i < count; i++)
+        {
+            int o = i * 3;
+            positions.Add(new Point3D(p[o], p[o+1], p[o+2]));
+            normals.Add(new Vector3D(n[o], n[o+1], n[o+2]));
+        }
+
+        foreach (int idx in data.Indices)
+            indices.Add(idx);
+
+        // Bone-coloured material (warm off-white).
+        var boneBrush = new SolidColorBrush(Color.FromRgb(230, 220, 200));
+        var material  = new DiffuseMaterial(boneBrush);
+
+        var model  = new GeometryModel3D(geometry, material) { BackMaterial = material };
+        var visual = new ModelVisual3D { Content = model };
+
+        // Remove any previous bone mesh, keep lights.
+        var toRemove = Viewport3D.Children
+            .OfType<ModelVisual3D>()
+            .Where(v => v.Content is GeometryModel3D)
+            .ToList();
+        foreach (var v in toRemove)
+            Viewport3D.Children.Remove(v);
+
+        Viewport3D.Children.Add(visual);
+        Viewport3D.ZoomExtents();
+    }
+
+    private void ResetCamera_Click(object sender, RoutedEventArgs e)
+    {
+        Viewport3D.ZoomExtents();
     }
 
     // ── Menu handlers ──────────────────────────────────────────────────────

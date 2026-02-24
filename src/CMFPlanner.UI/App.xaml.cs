@@ -45,5 +45,8 @@ public partial class App : Application
 
         // Volume builder
         services.AddSingleton<IVolumeBuilder, VtkVolumeBuilder>();
+
+        // Mesh extraction (marching cubes)
+        services.AddSingleton<IMeshExtractor, MarchingCubesExtractor>();
     }
 }
