@@ -1,6 +1,5 @@
 using CMFPlanner.Core.Models;
 using FellowOakDicom;
-using FellowOakDicom.Imaging;
 
 namespace CMFPlanner.Visualization;
 
@@ -59,7 +58,7 @@ public sealed class VtkVolumeBuilder : IVolumeBuilder
                             ? BitConverter.ToInt16(frameBytes, offset)
                             : BitConverter.ToUInt16(frameBytes, offset),
                     8  => isSigned ? (sbyte)frameBytes[offset] : frameBytes[offset],
-                    _  => 0,
+                    _  => throw new NotSupportedException($"Unsupported BitsAllocated={bits}; only 8/16-bit monochrome slices are supported."),
                 };
 
                 double hu = raw * slope + intercept;
@@ -77,7 +76,10 @@ public sealed class VtkVolumeBuilder : IVolumeBuilder
             SliceCount = nz,
             SpacingX   = volume.PixelSpacingX,
             SpacingY   = volume.PixelSpacingY,
-            SpacingZ   = volume.SliceThickness,
+            SpacingZ   = volume.SpacingZ > 0 ? volume.SpacingZ : volume.SliceThickness,
+            OriginX    = volume.OriginX,
+            OriginY    = volume.OriginY,
+            OriginZ    = volume.OriginZ,
         };
     }
 

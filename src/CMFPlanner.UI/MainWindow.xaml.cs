@@ -139,7 +139,7 @@ public partial class MainWindow : Window
             StatusMessages.Text =
                 $"{_currentVolume.SliceCount} slices  " +
                 $"{_currentVolume.Rows}×{_currentVolume.Columns}  " +
-                $"{_currentVolume.PixelSpacingX:F3}×{_currentVolume.PixelSpacingY:F3}×{_currentVolume.SliceThickness:F3} mm";
+                $"{_currentVolume.PixelSpacingX:F3}×{_currentVolume.PixelSpacingY:F3}×{_currentVolume.SpacingZ:F3} mm";
         }
         catch (OperationCanceledException)
         {
