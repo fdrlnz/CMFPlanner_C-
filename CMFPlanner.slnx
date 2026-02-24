@@ -2,6 +2,10 @@
   <Folder Name="/plugins/">
     <Project Path="plugins/SampleVisualizationPlugin/SampleVisualizationPlugin.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CMFPlanner.Dicom.Tests/CMFPlanner.Dicom.Tests.csproj" />
+    <Project Path="tests/CMFPlanner.Visualization.Tests/CMFPlanner.Visualization.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/CMFPlanner.Core/CMFPlanner.Core.csproj" />
     <Project Path="src/CMFPlanner.Dicom/CMFPlanner.Dicom.csproj" />

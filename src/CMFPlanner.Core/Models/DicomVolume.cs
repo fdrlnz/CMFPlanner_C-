@@ -27,5 +27,19 @@ public sealed class DicomVolume
     public int Rows    { get; init; }
     public int Columns { get; init; }
 
+    /// <summary>
+    /// Computed inter-slice spacing along the scan direction (mm).
+    /// Derived from adjacent IPP geometry (median), then SpacingBetweenSlices,
+    /// then SliceThickness, then 1.0 as last-resort fallback.
+    /// </summary>
+    public double SpacingZ { get; init; }
+
+    /// <summary>Image Position Patient X of the first (inferior-most) slice (mm). 0 if unavailable.</summary>
+    public double OriginX { get; init; }
+    /// <summary>Image Position Patient Y of the first (inferior-most) slice (mm). 0 if unavailable.</summary>
+    public double OriginY { get; init; }
+    /// <summary>Image Position Patient Z of the first (inferior-most) slice (mm). 0 if unavailable.</summary>
+    public double OriginZ { get; init; }
+
     public int SliceCount => SliceFilePaths.Count;
 }

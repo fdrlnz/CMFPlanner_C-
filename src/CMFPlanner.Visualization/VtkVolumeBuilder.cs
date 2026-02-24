@@ -1,6 +1,9 @@
+using System.Runtime.CompilerServices;
 using CMFPlanner.Core.Models;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+
+[assembly: InternalsVisibleTo("CMFPlanner.Visualization.Tests")]
 
 namespace CMFPlanner.Visualization;
 
@@ -50,6 +53,11 @@ public sealed class VtkVolumeBuilder : IVolumeBuilder
             int   bytesPerPx  = Math.Max(1, bits / 8);
             int   baseIdx     = z * sliceVoxels;
 
+            if (bits != 8 && bits != 16)
+                throw new InvalidOperationException(
+                    $"Slice {z} ({volume.SliceFilePaths[z]}): unsupported BitsAllocated={bits}. " +
+                    "Only 8-bit and 16-bit pixel data are supported.");
+
             for (int i = 0; i < sliceVoxels; i++)
             {
                 int offset = i * bytesPerPx;
@@ -57,13 +65,12 @@ public sealed class VtkVolumeBuilder : IVolumeBuilder
                 {
                     16 => isSigned
                             ? BitConverter.ToInt16(frameBytes, offset)
-                            : BitConverter.ToUInt16(frameBytes, offset),
-                    8  => isSigned ? (sbyte)frameBytes[offset] : frameBytes[offset],
-                    _  => 0,
+                            : (int)BitConverter.ToUInt16(frameBytes, offset),
+                    8  => isSigned ? (int)(sbyte)frameBytes[offset] : (int)frameBytes[offset],
+                    _  => 0, // unreachable — guarded above
                 };
 
-                double hu = raw * slope + intercept;
-                huBuffer[baseIdx + i] = (short)Math.Clamp(hu, short.MinValue, short.MaxValue);
+                huBuffer[baseIdx + i] = ConvertToHu(raw, slope, intercept);
             }
 
             progress?.Report((z + 1, nz));
@@ -77,9 +84,16 @@ public sealed class VtkVolumeBuilder : IVolumeBuilder
             SliceCount = nz,
             SpacingX   = volume.PixelSpacingX,
             SpacingY   = volume.PixelSpacingY,
-            SpacingZ   = volume.SliceThickness,
+            SpacingZ   = volume.SpacingZ,
+            OriginX    = volume.OriginX,
+            OriginY    = volume.OriginY,
+            OriginZ    = volume.OriginZ,
         };
     }
+
+    /// <summary>Converts a raw pixel value to a clamped Hounsfield Unit short.</summary>
+    internal static short ConvertToHu(int raw, double slope, double intercept)
+        => (short)Math.Clamp(raw * slope + intercept, short.MinValue, short.MaxValue);
 
     private static double GetDouble(DicomDataset ds, DicomTag tag, double defaultVal)
     {

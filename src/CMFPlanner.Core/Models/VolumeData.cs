@@ -18,6 +18,13 @@ public sealed class VolumeData
     /// <summary>Voxel spacing along Z / slice thickness (mm).</summary>
     public double SpacingZ { get; init; }
 
+    /// <summary>World-space origin X (mm) from DICOM Image Position Patient.</summary>
+    public double OriginX { get; init; }
+    /// <summary>World-space origin Y (mm) from DICOM Image Position Patient.</summary>
+    public double OriginY { get; init; }
+    /// <summary>World-space origin Z (mm) from DICOM Image Position Patient.</summary>
+    public double OriginZ { get; init; }
+
     public long TotalVoxels => (long)Columns * Rows * SliceCount;
 
     public short GetVoxel(int x, int y, int z)
