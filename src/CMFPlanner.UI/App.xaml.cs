@@ -1,7 +1,9 @@
 using System.IO;
 using System.Windows;
+using CMFPlanner.Core.Session;
 using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
+using CMFPlanner.Visualization;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CMFPlanner.UI;
@@ -37,5 +39,11 @@ public partial class App : Application
 
         // DICOM loading
         services.AddSingleton<IDicomLoader, DicomLoader>();
+
+        // Session state
+        services.AddSingleton<ISessionState, SessionState>();
+
+        // Volume builder
+        services.AddSingleton<IVolumeBuilder, VtkVolumeBuilder>();
     }
 }

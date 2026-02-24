@@ -3,16 +3,22 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CMFPlanner.Core.Models;
+using CMFPlanner.Core.Session;
 using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
+using CMFPlanner.Visualization;
 
 namespace CMFPlanner.UI;
 
 public partial class MainWindow : Window
 {
-    private readonly PluginManager _pluginManager;
-    private readonly IDicomLoader  _dicomLoader;
-    private DicomVolume?           _currentVolume;
+    private readonly PluginManager  _pluginManager;
+    private readonly IDicomLoader   _dicomLoader;
+    private readonly ISessionState  _sessionState;
+    private readonly IVolumeBuilder _volumeBuilder;
+
+    private DicomVolume? _currentVolume;
+    private VolumeData?  _volumeData;
 
     // Workflow step definitions — order matches the clinical workflow.
     private static readonly (string Title, string Description)[] Steps =
@@ -28,10 +34,16 @@ public partial class MainWindow : Window
         ("Export",            "STL files and PDF report"),
     ];
 
-    public MainWindow(PluginManager pluginManager, IDicomLoader dicomLoader)
+    public MainWindow(
+        PluginManager  pluginManager,
+        IDicomLoader   dicomLoader,
+        ISessionState  sessionState,
+        IVolumeBuilder volumeBuilder)
     {
         _pluginManager = pluginManager;
         _dicomLoader   = dicomLoader;
+        _sessionState  = sessionState;
+        _volumeBuilder = volumeBuilder;
         InitializeComponent();
         Loaded += OnLoaded;
     }
@@ -60,29 +72,50 @@ public partial class MainWindow : Window
 
     private async Task LoadDicomFolderAsync(string folderPath)
     {
-        LoadingOverlay.Visibility = Visibility.Visible;
+        LoadingOverlay.Visibility       = Visibility.Visible;
         LoadingProgress.IsIndeterminate = true;
-        LoadingText.Text = "Scanning DICOM files…";
-        StatusActiveTool.Text = "Loading…";
-        StatusMeasurements.Text = string.Empty;
-        StatusMessages.Text = string.Empty;
-
-        var progress = new Progress<(int Done, int Total)>(p =>
-        {
-            LoadingProgress.IsIndeterminate = false;
-            LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
-            LoadingText.Text = $"Reading file {p.Done} of {p.Total}…";
-        });
+        LoadingText.Text                = "Scanning DICOM files…";
+        StatusActiveTool.Text           = "Loading…";
+        StatusMeasurements.Text         = string.Empty;
+        StatusMessages.Text             = string.Empty;
 
         try
         {
-            _currentVolume = await _dicomLoader.LoadSeriesAsync(folderPath, progress);
+            // ── Phase 1: read metadata / sort slices ──────────────────────
+
+            var phase1 = new Progress<(int Done, int Total)>(p =>
+            {
+                LoadingProgress.IsIndeterminate = false;
+                LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
+                LoadingText.Text = $"Reading DICOM file {p.Done} of {p.Total}…";
+            });
+
+            _currentVolume = await _dicomLoader.LoadSeriesAsync(folderPath, phase1);
+            _sessionState.DicomVolume = _currentVolume;
+
+            // ── Phase 2: load pixel data and build vtkImageData ───────────
+
+            LoadingProgress.IsIndeterminate = true;
+            LoadingText.Text = "Building 3D volume…";
+
+            var phase2 = new Progress<(int Done, int Total)>(p =>
+            {
+                LoadingProgress.IsIndeterminate = false;
+                LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
+                LoadingText.Text = $"Processing slice {p.Done} of {p.Total}…";
+            });
+
+            _volumeData = await _volumeBuilder.BuildAsync(_currentVolume, phase2);
+            _sessionState.VolumeData = _volumeData;
+
+            // ── Update status bar ─────────────────────────────────────────
 
             StatusActiveTool.Text = "Ready";
             StatusMeasurements.Text =
                 $"{_currentVolume.PatientName}  ·  {FormatStudyDate(_currentVolume.StudyDate)}  ·  {_currentVolume.Modality}";
             StatusMessages.Text =
-                $"{_currentVolume.SliceCount} slices  {_currentVolume.Rows}×{_currentVolume.Columns}  " +
+                $"{_currentVolume.SliceCount} slices  " +
+                $"{_currentVolume.Rows}×{_currentVolume.Columns}  " +
                 $"{_currentVolume.PixelSpacingX:F3}×{_currentVolume.PixelSpacingY:F3}×{_currentVolume.SliceThickness:F3} mm";
         }
         catch (OperationCanceledException)
@@ -92,7 +125,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             StatusActiveTool.Text = "Load failed";
-            StatusMessages.Text = ex.Message;
+            StatusMessages.Text   = ex.Message;
             MessageBox.Show(ex.Message, "DICOM Load Error",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -138,12 +171,12 @@ public partial class MainWindow : Window
 
             var badge = new Border
             {
-                Width               = 20,
-                Height              = 20,
-                Background          = new SolidColorBrush(badgeColor),
-                CornerRadius        = new CornerRadius(10),
-                VerticalAlignment   = VerticalAlignment.Top,
-                Margin              = new Thickness(0, 2, 0, 0),
+                Width             = 20,
+                Height            = 20,
+                Background        = new SolidColorBrush(badgeColor),
+                CornerRadius      = new CornerRadius(10),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin            = new Thickness(0, 2, 0, 0),
                 Child = new TextBlock
                 {
                     Text                = number.ToString(),
@@ -200,13 +233,13 @@ public partial class MainWindow : Window
     {
         bool show = MenuToggleWorkflow.IsChecked;
         LeftPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        LeftColumn.Width = show ? new GridLength(200) : new GridLength(0);
+        LeftColumn.Width     = show ? new GridLength(200) : new GridLength(0);
     }
 
     private void MenuToggleProperties_Click(object sender, RoutedEventArgs e)
     {
         bool show = MenuToggleProperties.IsChecked;
         RightPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        RightColumn.Width = show ? new GridLength(250) : new GridLength(0);
+        RightColumn.Width     = show ? new GridLength(250) : new GridLength(0);
     }
 }
