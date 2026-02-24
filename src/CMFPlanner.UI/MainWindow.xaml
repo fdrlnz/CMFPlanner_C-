@@ -297,6 +297,22 @@
                     <helix:SunLight/>
                 </helix:HelixViewport3D>
 
+                <!-- Grid toggle button — top-right of 3D viewport -->
+                <ToggleButton x:Name="BtnToggleGrid"
+                              Style="{StaticResource PersistentToggle}"
+                              IsChecked="True"
+                              Panel.ZIndex="5"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Top"
+                              Margin="8"
+                              Padding="8,4"
+                              FontSize="10"
+                              Click="BtnToggleGrid_Click"
+                              ToolTip="Toggle metric reference grid"
+                              Visibility="Collapsed">
+                    Grid
+                </ToggleButton>
+
                 <!-- Loading overlay (shown during DICOM load phases) -->
                 <Grid x:Name="LoadingOverlay"
                       Visibility="Collapsed"

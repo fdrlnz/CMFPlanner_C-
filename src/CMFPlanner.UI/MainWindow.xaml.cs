@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private DicomVolume? _currentVolume;
     private VolumeData?  _volumeData;
 
+    private readonly AdaptiveGridVisual3D _grid = new();
+
     // Bone isovalue in Hounsfield Units.
     private const short BoneThreshold = 400;
 
@@ -61,8 +63,22 @@ public partial class MainWindow : Window
         TriplanarView.CursorHuChanged += hu =>
             StatusMessages.Text = $"HU: {hu}";
 
+        // Add adaptive metric grid and wire up camera tracking
+        Viewport3D.Children.Add(_grid);
+        Viewport3D.CameraChanged += OnViewportCameraChanged;
+
+        // Initial render at default camera position
+        if (Viewport3D.Camera is System.Windows.Media.Media3D.PerspectiveCamera initCam)
+            _grid.Update(initCam);
+
         PopulateWorkflowSteps();
         RefreshStatusBar();
+    }
+
+    private void OnViewportCameraChanged(object sender, RoutedEventArgs e)
+    {
+        if (Viewport3D.Camera is System.Windows.Media.Media3D.PerspectiveCamera cam)
+            _grid.Update(cam);
     }
 
     // ── Open DICOM ─────────────────────────────────────────────────────────
@@ -190,19 +206,29 @@ public partial class MainWindow : Window
 
     private void ShowTriplanarView()
     {
-        TriplanarView.Visibility = Visibility.Visible;
-        Viewport3D.Visibility    = Visibility.Collapsed;
-        BtnView2D.IsChecked      = true;
-        BtnView3D.IsChecked      = false;
-        StatusMessages.Text      = string.Empty;
+        TriplanarView.Visibility  = Visibility.Visible;
+        Viewport3D.Visibility     = Visibility.Collapsed;
+        BtnView2D.IsChecked       = true;
+        BtnView3D.IsChecked       = false;
+        BtnToggleGrid.Visibility  = Visibility.Collapsed;
+        StatusMessages.Text       = string.Empty;
     }
 
     private void ShowViewport3D()
     {
-        TriplanarView.Visibility = Visibility.Collapsed;
-        Viewport3D.Visibility    = Visibility.Visible;
-        BtnView2D.IsChecked      = false;
-        BtnView3D.IsChecked      = true;
+        TriplanarView.Visibility  = Visibility.Collapsed;
+        Viewport3D.Visibility     = Visibility.Visible;
+        BtnView2D.IsChecked       = false;
+        BtnView3D.IsChecked       = true;
+        BtnToggleGrid.Visibility  = Visibility.Visible;
+    }
+
+    private void BtnToggleGrid_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnToggleGrid.IsChecked == true)
+            Viewport3D.Children.Add(_grid);
+        else
+            Viewport3D.Children.Remove(_grid);
     }
 
     // ── Workflow step list ─────────────────────────────────────────────────
