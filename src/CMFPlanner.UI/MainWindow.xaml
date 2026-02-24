@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:helix="http://helix-toolkit.org/wpf"
+        xmlns:local="clr-namespace:CMFPlanner.UI"
         mc:Ignorable="d"
         Title="CMF Planner v1.0"
         MinWidth="1280" MinHeight="720"
@@ -184,6 +185,26 @@
                     Reset Camera
                 </Button>
 
+                <!-- Separator -->
+                <Rectangle Width="1" Fill="#3E3E42" Margin="8,8"/>
+
+                <!-- View mode toggles -->
+                <ToggleButton x:Name="BtnView2D"
+                              Style="{StaticResource PersistentToggle}"
+                              Margin="2,0"
+                              Click="BtnView2D_Click"
+                              ToolTip="2D triplanar slice viewer (axial · coronal · sagittal)">
+                    2D Slices
+                </ToggleButton>
+                <ToggleButton x:Name="BtnView3D"
+                              Style="{StaticResource PersistentToggle}"
+                              IsChecked="True"
+                              Margin="2,0"
+                              Click="BtnView3D_Click"
+                              ToolTip="3D volume renderer">
+                    3D View
+                </ToggleButton>
+
             </StackPanel>
         </Border>
 
@@ -261,36 +282,43 @@
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Columns"/>
 
-            <!-- ── Center: 3D Viewport ───────────────────────────── -->
-            <helix:HelixViewport3D Grid.Column="2"
-                                   x:Name="Viewport3D"
-                                   Background="#1E1E1E"
-                                   ShowCoordinateSystem="True"
-                                   ShowFrameRate="False">
-                <helix:SunLight/>
-            </helix:HelixViewport3D>
+            <!-- ── Center: viewport container ──────────────────────── -->
+            <Grid Grid.Column="2">
 
-            <!-- ── Loading overlay (shown during DICOM load) ─────── -->
-            <Grid x:Name="LoadingOverlay"
-                  Grid.Column="2"
-                  Visibility="Collapsed"
-                  Panel.ZIndex="10"
-                  Background="#CC1E1E1E">
-                <StackPanel HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                    <ProgressBar x:Name="LoadingProgress"
-                                 Width="280" Height="4"
-                                 Minimum="0" Maximum="100"
-                                 IsIndeterminate="True"
-                                 Foreground="#0078D4"
-                                 Background="#3E3E42"/>
-                    <TextBlock x:Name="LoadingText"
-                               Text="Loading DICOM series…"
-                               Foreground="#CCCCCC"
-                               FontSize="12"
-                               HorizontalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                </StackPanel>
+                <!-- Triplanar 2D viewer — visible after DICOM load -->
+                <local:TriplanarViewer x:Name="TriplanarView"
+                                       Visibility="Collapsed"/>
+
+                <!-- 3D viewport — default on startup, optional after load -->
+                <helix:HelixViewport3D x:Name="Viewport3D"
+                                       Background="#1E1E1E"
+                                       ShowCoordinateSystem="True"
+                                       ShowFrameRate="False">
+                    <helix:SunLight/>
+                </helix:HelixViewport3D>
+
+                <!-- Loading overlay (shown during DICOM load phases) -->
+                <Grid x:Name="LoadingOverlay"
+                      Visibility="Collapsed"
+                      Panel.ZIndex="10"
+                      Background="#CC1E1E1E">
+                    <StackPanel HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <ProgressBar x:Name="LoadingProgress"
+                                     Width="280" Height="4"
+                                     Minimum="0" Maximum="100"
+                                     IsIndeterminate="True"
+                                     Foreground="#0078D4"
+                                     Background="#3E3E42"/>
+                        <TextBlock x:Name="LoadingText"
+                                   Text="Loading DICOM series…"
+                                   Foreground="#CCCCCC"
+                                   FontSize="12"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Grid>
+
             </Grid>
 
             <!-- ── Splitter: center | right ──────────────────────── -->

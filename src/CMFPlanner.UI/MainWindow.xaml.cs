@@ -26,12 +26,10 @@ public partial class MainWindow : Window
     // Bone isovalue in Hounsfield Units.
     private const short BoneThreshold = 400;
 
-    // Workflow step definitions — order matches the clinical workflow.
+    // User-visible workflow steps (segmentation and segment ID are internal).
     private static readonly (string Title, string Description)[] Steps =
     [
         ("Import DICOM",      "Load CT or CBCT series"),
-        ("Segmentation",      "Segment bone and soft tissue"),
-        ("Identify Segments", "Skull, mandible, teeth"),
         ("Dental Casts",      "Align STL arches to CT model"),
         ("NHP",               "Natural head position"),
         ("Osteotomies",       "Plan virtual bone cuts"),
@@ -60,6 +58,9 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        TriplanarView.CursorHuChanged += hu =>
+            StatusMessages.Text = $"HU: {hu}";
+
         PopulateWorkflowSteps();
         RefreshStatusBar();
     }
@@ -72,9 +73,7 @@ public partial class MainWindow : Window
         {
             Title = "Select DICOM Series Folder",
         };
-
         if (dialog.ShowDialog() != true) return;
-
         await LoadDicomFolderAsync(dialog.FolderName);
     }
 
@@ -101,10 +100,10 @@ public partial class MainWindow : Window
             _currentVolume = await _dicomLoader.LoadSeriesAsync(folderPath, phase1);
             _sessionState.DicomVolume = _currentVolume;
 
-            // ── Phase 2: load pixel data and build vtkImageData ───────────
+            // ── Phase 2: build HU buffer ───────────────────────────────────
 
             LoadingProgress.IsIndeterminate = true;
-            LoadingText.Text = "Building 3D volume…";
+            LoadingText.Text = "Building HU volume…";
 
             var phase2 = new Progress<(int Done, int Total)>(p =>
             {
@@ -116,30 +115,26 @@ public partial class MainWindow : Window
             _volumeData = await _volumeBuilder.BuildAsync(_currentVolume, phase2);
             _sessionState.VolumeData = _volumeData;
 
-            // ── Phase 3: marching cubes → bone mesh ───────────────────────
+            // ── Phase 3: show triplanar viewer (immediate, no wait) ────────
 
-            LoadingProgress.IsIndeterminate = true;
-            LoadingText.Text = "Extracting bone surface…";
+            LoadingOverlay.Visibility = Visibility.Collapsed;
 
-            var phase3 = new Progress<(int Done, int Total)>(p =>
-            {
-                LoadingProgress.IsIndeterminate = false;
-                LoadingProgress.Value = p.Total > 0 ? (double)p.Done / p.Total * 100.0 : 0;
-                LoadingText.Text = $"Marching cubes row {p.Done} of {p.Total}…";
-            });
-
-            var meshData = await _meshExtractor.ExtractAsync(_volumeData, BoneThreshold, 2, phase3);
-            DisplayBoneMesh(meshData);
-
-            // ── Update status bar ─────────────────────────────────────────
-
-            StatusActiveTool.Text = "Ready";
-            StatusMeasurements.Text =
+            string patientLabel =
                 $"{_currentVolume.PatientName}  ·  {FormatStudyDate(_currentVolume.StudyDate)}  ·  {_currentVolume.Modality}";
+            TriplanarView.SetVolume(_volumeData, patientLabel);
+            ShowTriplanarView();
+
+            StatusActiveTool.Text   = "2D Viewer";
+            StatusMeasurements.Text = patientLabel;
             StatusMessages.Text =
                 $"{_currentVolume.SliceCount} slices  " +
                 $"{_currentVolume.Rows}×{_currentVolume.Columns}  " +
                 $"{_currentVolume.PixelSpacingX:F3}×{_currentVolume.PixelSpacingY:F3}×{_currentVolume.SpacingZ:F3} mm";
+
+            // ── Phase 4: marching cubes in background (non-blocking) ───────
+
+            BtnView3D.IsEnabled = false;
+            _ = ExtractBoneMeshAsync();
         }
         catch (OperationCanceledException)
         {
@@ -158,12 +153,56 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task ExtractBoneMeshAsync()
+    {
+        if (_volumeData == null) return;
+        try
+        {
+            StatusActiveTool.Text = "Extracting bone surface…";
+
+            var progress = new Progress<(int Done, int Total)>(p =>
+                StatusActiveTool.Text = $"Bone surface {p.Done}/{p.Total}…");
+
+            var meshData = await _meshExtractor.ExtractAsync(_volumeData, BoneThreshold, 2, progress);
+            DisplayBoneMesh(meshData);
+
+            BtnView3D.IsEnabled   = true;
+            StatusActiveTool.Text = "Ready — 3D View available";
+        }
+        catch (Exception ex)
+        {
+            StatusActiveTool.Text = "Bone extraction failed";
+            StatusMessages.Text   = ex.Message;
+        }
+    }
+
     private static string FormatStudyDate(string raw)
     {
-        // DICOM date: YYYYMMDD → YYYY-MM-DD
         if (raw.Length == 8 && raw.All(char.IsDigit))
             return $"{raw[..4]}-{raw[4..6]}-{raw[6..]}";
         return raw;
+    }
+
+    // ── View toggle ────────────────────────────────────────────────────────
+
+    private void BtnView2D_Click(object sender, RoutedEventArgs e) => ShowTriplanarView();
+    private void BtnView3D_Click(object sender, RoutedEventArgs e) => ShowViewport3D();
+
+    private void ShowTriplanarView()
+    {
+        TriplanarView.Visibility = Visibility.Visible;
+        Viewport3D.Visibility    = Visibility.Collapsed;
+        BtnView2D.IsChecked      = true;
+        BtnView3D.IsChecked      = false;
+        StatusMessages.Text      = string.Empty;
+    }
+
+    private void ShowViewport3D()
+    {
+        TriplanarView.Visibility = Visibility.Collapsed;
+        Viewport3D.Visibility    = Visibility.Visible;
+        BtnView2D.IsChecked      = false;
+        BtnView3D.IsChecked      = true;
     }
 
     // ── Workflow step list ─────────────────────────────────────────────────
@@ -254,9 +293,7 @@ public partial class MainWindow : Window
     {
         if (data.VertexCount == 0) return;
 
-        // Build WPF MeshGeometry3D from flat arrays.
         var geometry = new MeshGeometry3D();
-
         var positions = geometry.Positions = new Point3DCollection(data.VertexCount);
         var normals   = geometry.Normals   = new Vector3DCollection(data.VertexCount);
         var indices   = geometry.TriangleIndices = new Int32Collection(data.Indices.Length);
@@ -271,18 +308,14 @@ public partial class MainWindow : Window
             positions.Add(new Point3D(p[o], p[o+1], p[o+2]));
             normals.Add(new Vector3D(n[o], n[o+1], n[o+2]));
         }
-
         foreach (int idx in data.Indices)
             indices.Add(idx);
 
-        // Bone-coloured material (warm off-white).
         var boneBrush = new SolidColorBrush(Color.FromRgb(230, 220, 200));
         var material  = new DiffuseMaterial(boneBrush);
+        var model     = new GeometryModel3D(geometry, material) { BackMaterial = material };
+        var visual    = new ModelVisual3D { Content = model };
 
-        var model  = new GeometryModel3D(geometry, material) { BackMaterial = material };
-        var visual = new ModelVisual3D { Content = model };
-
-        // Remove any previous bone mesh, keep lights.
         var toRemove = Viewport3D.Children
             .OfType<ModelVisual3D>()
             .Where(v => v.Content is GeometryModel3D)
@@ -295,9 +328,7 @@ public partial class MainWindow : Window
     }
 
     private void ResetCamera_Click(object sender, RoutedEventArgs e)
-    {
-        Viewport3D.ZoomExtents();
-    }
+        => Viewport3D.ZoomExtents();
 
     // ── Menu handlers ──────────────────────────────────────────────────────
 

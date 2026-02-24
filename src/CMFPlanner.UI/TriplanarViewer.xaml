@@ -1,0 +1,190 @@
+<UserControl x:Class="CMFPlanner.UI.TriplanarViewer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#0D0D0D">
+
+    <UserControl.Resources>
+        <Style x:Key="PresetBtn" TargetType="Button">
+            <Setter Property="Background"      Value="#2D2D2D"/>
+            <Setter Property="Foreground"      Value="#AAAAAA"/>
+            <Setter Property="BorderBrush"     Value="#3E3E42"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="6,3"/>
+            <Setter Property="Margin"          Value="2,0"/>
+            <Setter Property="FontSize"        Value="10"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#0078D4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- 3-row × 3-col grid: content / 2px separator / content -->
+    <Grid x:Name="ViewportGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="2"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="2"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Separators -->
+        <Rectangle x:Name="HSeparator"
+                   Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                   Fill="#3E3E42"/>
+        <Rectangle x:Name="VSeparator"
+                   Grid.Row="0" Grid.Column="1" Grid.RowSpan="3"
+                   Fill="#3E3E42"/>
+
+        <!-- ══ AXIAL  (top-left) ══════════════════════════════════════ -->
+        <Border x:Name="AxialBorder" Grid.Row="0" Grid.Column="0" ClipToBounds="True">
+            <Grid>
+                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid x:Name="AxialGrid" Width="1" Height="1" Background="Black"
+                          Cursor="Cross"
+                          MouseLeftButtonDown="AxialGrid_MouseLeftButtonDown"
+                          MouseMove="AxialGrid_MouseMove"
+                          MouseRightButtonDown="AnyGrid_RightButtonDown"
+                          MouseRightButtonUp="AnyGrid_RightButtonUp"
+                          MouseWheel="AxialGrid_MouseWheel">
+                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                        <Image x:Name="AxialImage" Stretch="Fill"
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <Canvas x:Name="AxialCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                            <Line x:Name="AxialHLine" Stroke="#44BB44" StrokeThickness="0.8"/>
+                            <Line x:Name="AxialVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
+                        </Canvas>
+                    </Grid>
+                </Viewbox>
+                <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Padding="5,2" Margin="4" IsHitTestVisible="False">
+                    <TextBlock Text="AXIAL" Foreground="#44BB44" FontSize="10" FontWeight="SemiBold"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ══ CORONAL  (top-right) ══════════════════════════════════ -->
+        <Border x:Name="CoronalBorder" Grid.Row="0" Grid.Column="2" ClipToBounds="True">
+            <Grid>
+                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid x:Name="CoronalGrid" Width="1" Height="1" Background="Black"
+                          Cursor="Cross"
+                          MouseLeftButtonDown="CoronalGrid_MouseLeftButtonDown"
+                          MouseMove="CoronalGrid_MouseMove"
+                          MouseRightButtonDown="AnyGrid_RightButtonDown"
+                          MouseRightButtonUp="AnyGrid_RightButtonUp"
+                          MouseWheel="CoronalGrid_MouseWheel">
+                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                        <Image x:Name="CoronalImage" Stretch="Fill"
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <Canvas x:Name="CoronalCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                            <Line x:Name="CoronalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
+                            <Line x:Name="CoronalVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
+                        </Canvas>
+                    </Grid>
+                </Viewbox>
+                <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Padding="5,2" Margin="4" IsHitTestVisible="False">
+                    <TextBlock Text="CORONAL" Foreground="#4488FF" FontSize="10" FontWeight="SemiBold"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ══ SAGITTAL  (bottom-left) ══════════════════════════════ -->
+        <Border x:Name="SagittalBorder" Grid.Row="2" Grid.Column="0" ClipToBounds="True">
+            <Grid>
+                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid x:Name="SagittalGrid" Width="1" Height="1" Background="Black"
+                          Cursor="Cross"
+                          MouseLeftButtonDown="SagittalGrid_MouseLeftButtonDown"
+                          MouseMove="SagittalGrid_MouseMove"
+                          MouseRightButtonDown="AnyGrid_RightButtonDown"
+                          MouseRightButtonUp="AnyGrid_RightButtonUp"
+                          MouseWheel="SagittalGrid_MouseWheel">
+                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                        <Image x:Name="SagittalImage" Stretch="Fill"
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <Canvas x:Name="SagittalCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                            <Line x:Name="SagittalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
+                            <Line x:Name="SagittalVLine" Stroke="#44BB44" StrokeThickness="0.8"/>
+                        </Canvas>
+                    </Grid>
+                </Viewbox>
+                <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Padding="5,2" Margin="4" IsHitTestVisible="False">
+                    <TextBlock Text="SAGITTAL" Foreground="#FF8800" FontSize="10" FontWeight="SemiBold"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ══ INFO PANEL  (bottom-right) ═══════════════════════════ -->
+        <Border x:Name="InfoBorder" Grid.Row="2" Grid.Column="2" Background="#111111">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Margin="12" MaxWidth="200">
+                <TextBlock x:Name="InfoPatient"
+                           Foreground="#999999" FontSize="11"
+                           TextAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock x:Name="InfoDimensions"
+                           Foreground="#666666" FontSize="10"
+                           Margin="0,8,0,0" TextAlignment="Center"/>
+                <TextBlock x:Name="InfoSpacing"
+                           Foreground="#666666" FontSize="10"
+                           TextAlignment="Center"/>
+
+                <!-- W/L presets -->
+                <TextBlock Text="WINDOW / LEVEL"
+                           Foreground="#444444" FontSize="9"
+                           Margin="0,14,0,5" TextAlignment="Center"
+                           FontWeight="SemiBold"/>
+                <UniformGrid Columns="2" Margin="0,0,0,6">
+                    <Button Content="Soft Tissue" Style="{StaticResource PresetBtn}"
+                            Click="BtnPresetSoftTissue_Click" ToolTip="W=400 L=40"/>
+                    <Button Content="Bone" Style="{StaticResource PresetBtn}"
+                            Click="BtnPresetBone_Click" ToolTip="W=2000 L=400"/>
+                </UniformGrid>
+                <TextBlock x:Name="InfoWL"
+                           Foreground="#888888" FontSize="10"
+                           TextAlignment="Center"/>
+
+                <!-- Usage hints -->
+                <TextBlock Text="Scroll: navigate slices"
+                           Foreground="#3D3D3D" FontSize="9"
+                           Margin="0,10,0,2" TextAlignment="Center"/>
+                <TextBlock Text="Click: move crosshair"
+                           Foreground="#3D3D3D" FontSize="9"
+                           TextAlignment="Center"/>
+                <TextBlock Text="Right-drag: adjust W/L"
+                           Foreground="#3D3D3D" FontSize="9"
+                           TextAlignment="Center"/>
+                <TextBlock Text="Double-click: expand view"
+                           Foreground="#3D3D3D" FontSize="9"
+                           TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</UserControl>
