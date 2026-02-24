@@ -15,8 +15,13 @@ public sealed class VolumeData
     public double SpacingX { get; init; }
     /// <summary>Voxel spacing along Y (mm).</summary>
     public double SpacingY { get; init; }
-    /// <summary>Voxel spacing along Z / slice thickness (mm).</summary>
+    /// <summary>Voxel spacing along Z (mm).</summary>
     public double SpacingZ { get; init; }
+
+    /// <summary>Patient-space origin of the first sorted slice.</summary>
+    public double OriginX { get; init; }
+    public double OriginY { get; init; }
+    public double OriginZ { get; init; }
 
     public long TotalVoxels => (long)Columns * Rows * SliceCount;
 

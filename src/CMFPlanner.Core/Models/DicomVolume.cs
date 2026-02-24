@@ -24,6 +24,17 @@ public sealed class DicomVolume
     /// <summary>Nominal slice thickness (mm).</summary>
     public double SliceThickness { get; init; }
 
+    /// <summary>Distance between slice centres when present (mm).</summary>
+    public double SpacingBetweenSlices { get; init; }
+
+    /// <summary>Resolved spacing along Z (mm) after metadata/geometry fallback.</summary>
+    public double SpacingZ { get; init; }
+
+    /// <summary>Patient-space origin (ImagePositionPatient) of the first sorted slice.</summary>
+    public double OriginX { get; init; }
+    public double OriginY { get; init; }
+    public double OriginZ { get; init; }
+
     public int Rows    { get; init; }
     public int Columns { get; init; }
 
