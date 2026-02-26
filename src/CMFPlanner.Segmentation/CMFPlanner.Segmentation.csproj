@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CMFPlanner.Core\CMFPlanner.Core.csproj" />
+    <ProjectReference Include="..\CMFPlanner.Visualization\CMFPlanner.Visualization.csproj" />
   </ItemGroup>
 
 </Project>

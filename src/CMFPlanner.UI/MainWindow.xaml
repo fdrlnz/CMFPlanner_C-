@@ -362,10 +362,91 @@
                                   HorizontalScrollBarVisibility="Disabled"
                                   Padding="8">
                         <StackPanel x:Name="PropertiesPanel">
-                            <TextBlock Text="No tool active."
+
+                            <!-- Placeholder shown before any DICOM is loaded -->
+                            <TextBlock x:Name="NoToolText"
+                                       Text="No tool active."
                                        Foreground="#858585"
                                        HorizontalAlignment="Center"
                                        Margin="0,20"/>
+
+                            <!-- Segmentation Controls — shown after DICOM loads -->
+                            <StackPanel x:Name="SegmentationPanel" Visibility="Collapsed">
+
+                                <TextBlock Text="SURFACE THRESHOLDS"
+                                           Foreground="#858585"
+                                           FontSize="10" FontWeight="SemiBold"
+                                           Margin="0,8,0,10"/>
+
+                                <!-- Bone threshold -->
+                                <TextBlock Text="Bone Threshold"
+                                           Foreground="#CCCCCC" Margin="0,0,0,2"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="58"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="BoneThresholdSlider"
+                                            Grid.Column="0"
+                                            Minimum="-1000" Maximum="3000" Value="400"
+                                            IsSnapToTickEnabled="False"
+                                            VerticalAlignment="Center"
+                                            ValueChanged="BoneThresholdSlider_ValueChanged"/>
+                                    <TextBlock x:Name="BoneThresholdLabel"
+                                               Grid.Column="1"
+                                               Text="400 HU"
+                                               Foreground="#CCCCCC" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+                                <TextBlock Text="Typical range: 400–1800 HU"
+                                           Foreground="#585858" FontSize="10"
+                                           Margin="0,1,0,12"/>
+
+                                <!-- Soft tissue threshold -->
+                                <TextBlock Text="Soft Tissue Threshold"
+                                           Foreground="#CCCCCC" Margin="0,0,0,2"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="58"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="SoftTissueThresholdSlider"
+                                            Grid.Column="0"
+                                            Minimum="-1000" Maximum="500" Value="-100"
+                                            IsSnapToTickEnabled="False"
+                                            VerticalAlignment="Center"
+                                            ValueChanged="SoftTissueThresholdSlider_ValueChanged"/>
+                                    <TextBlock x:Name="SoftTissueThresholdLabel"
+                                               Grid.Column="1"
+                                               Text="-100 HU"
+                                               Foreground="#CCCCCC" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+                                <TextBlock Text="Typical range: -100–400 HU"
+                                           Foreground="#585858" FontSize="10"
+                                           Margin="0,1,0,12"/>
+
+                                <!-- Status line -->
+                                <TextBlock x:Name="SegmentationStatusText"
+                                           Foreground="#858585" FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,12"/>
+
+                                <!-- Apply button -->
+                                <Button x:Name="BtnApplySegmentation"
+                                        Style="{StaticResource ToolbarActionButton}"
+                                        Background="#0078D4"
+                                        Foreground="White"
+                                        Padding="12,7"
+                                        HorizontalAlignment="Stretch"
+                                        Click="BtnApplySegmentation_Click"
+                                        ToolTip="Generate full-resolution smoothed meshes (bone ≤ 200 k, skin ≤ 100 k triangles)">
+                                    Apply Segmentation
+                                </Button>
+                            </StackPanel>
+
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

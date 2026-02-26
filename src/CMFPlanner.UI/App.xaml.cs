@@ -3,6 +3,7 @@ using System.Windows;
 using CMFPlanner.Core.Session;
 using CMFPlanner.Dicom;
 using CMFPlanner.Plugins;
+using CMFPlanner.Segmentation;
 using CMFPlanner.Visualization;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -48,5 +49,8 @@ public partial class App : Application
 
         // Mesh extraction (marching cubes)
         services.AddSingleton<IMeshExtractor, MarchingCubesExtractor>();
+
+        // Segmentation service (wraps mesh extractor for named bone/soft-tissue operations)
+        services.AddSingleton<ISegmentationService, SegmentationService>();
     }
 }
