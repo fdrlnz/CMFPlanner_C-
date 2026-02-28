@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="fo-dicom" Version="5.2.5" />
+    <PackageReference Include="fo-dicom.Codecs" Version="5.9.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
   </ItemGroup>
 

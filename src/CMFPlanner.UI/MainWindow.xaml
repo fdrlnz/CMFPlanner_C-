@@ -10,6 +10,7 @@
         MinWidth="1280" MinHeight="720"
         Width="1440" Height="900"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         Background="#1E1E1E"
         Foreground="#CCCCCC"
         FontFamily="Segoe UI"
@@ -159,51 +160,15 @@
                     NHP
                 </ToggleButton>
 
-                <!-- Soft Tissue — always visible -->
+                <!-- Soft Tissue — placeholder, coming in a future release -->
                 <ToggleButton x:Name="BtnSoftTissue"
                               Style="{StaticResource PersistentToggle}"
                               Margin="2,0"
-                              ToolTip="Toggle soft tissue overlay (geometric approximation)">
+                              IsEnabled="False"
+                              ToolTip="Soft tissue segmentation — coming soon">
                     Soft Tissue
                 </ToggleButton>
 
-                <!-- Bite Ref — always visible -->
-                <ToggleButton x:Name="BtnBiteRef"
-                              Style="{StaticResource PersistentToggle}"
-                              Margin="2,0"
-                              ToolTip="Toggle bite reference overlay">
-                    Bite Ref
-                </ToggleButton>
-
-                <!-- Separator -->
-                <Rectangle Width="1" Fill="#3E3E42" Margin="8,8"/>
-
-                <!-- Camera Reset -->
-                <Button Style="{StaticResource ToolbarActionButton}"
-                        Click="ResetCamera_Click"
-                        ToolTip="Reset camera to fit all geometry in view">
-                    Reset Camera
-                </Button>
-
-                <!-- Separator -->
-                <Rectangle Width="1" Fill="#3E3E42" Margin="8,8"/>
-
-                <!-- View mode toggles -->
-                <ToggleButton x:Name="BtnView2D"
-                              Style="{StaticResource PersistentToggle}"
-                              Margin="2,0"
-                              Click="BtnView2D_Click"
-                              ToolTip="2D triplanar slice viewer (axial · coronal · sagittal)">
-                    2D Slices
-                </ToggleButton>
-                <ToggleButton x:Name="BtnView3D"
-                              Style="{StaticResource PersistentToggle}"
-                              IsChecked="True"
-                              Margin="2,0"
-                              Click="BtnView3D_Click"
-                              ToolTip="3D volume renderer">
-                    3D View
-                </ToggleButton>
 
             </StackPanel>
         </Border>
@@ -403,31 +368,6 @@
                                            Foreground="#585858" FontSize="10"
                                            Margin="0,1,0,12"/>
 
-                                <!-- Soft tissue threshold -->
-                                <TextBlock Text="Soft Tissue Threshold"
-                                           Foreground="#CCCCCC" Margin="0,0,0,2"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="58"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Slider x:Name="SoftTissueThresholdSlider"
-                                            Grid.Column="0"
-                                            Minimum="-1000" Maximum="500" Value="-100"
-                                            IsSnapToTickEnabled="False"
-                                            VerticalAlignment="Center"
-                                            ValueChanged="SoftTissueThresholdSlider_ValueChanged"/>
-                                    <TextBlock x:Name="SoftTissueThresholdLabel"
-                                               Grid.Column="1"
-                                               Text="-100 HU"
-                                               Foreground="#CCCCCC" FontSize="11"
-                                               VerticalAlignment="Center"
-                                               Margin="6,0,0,0"/>
-                                </Grid>
-                                <TextBlock Text="Typical range: -100–400 HU"
-                                           Foreground="#585858" FontSize="10"
-                                           Margin="0,1,0,12"/>
-
                                 <!-- Status line -->
                                 <TextBlock x:Name="SegmentationStatusText"
                                            Foreground="#858585" FontSize="11"
@@ -442,7 +382,7 @@
                                         Padding="12,7"
                                         HorizontalAlignment="Stretch"
                                         Click="BtnApplySegmentation_Click"
-                                        ToolTip="Generate full-resolution smoothed meshes (bone ≤ 200 k, skin ≤ 100 k triangles)">
+                                        ToolTip="Generate full-resolution smoothed bone mesh (≤ 300 k triangles, ~20 s on 512×512×341 CT)">
                                     Apply Segmentation
                                 </Button>
                             </StackPanel>

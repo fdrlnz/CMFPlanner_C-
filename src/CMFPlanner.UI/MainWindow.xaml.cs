@@ -24,18 +24,14 @@ public partial class MainWindow : Window
     private DicomVolume? _currentVolume;
     private VolumeData?  _volumeData;
 
-    private readonly AdaptiveGridVisual3D _grid = new();
-
-    // Segmentation thresholds (Hounsfield Units), updated by live sliders.
-    private short _boneThreshold       = 400;
-    private short _softTissueThreshold = -100;
+    // Bone threshold (Hounsfield Units), updated by live slider.
+    private short _boneThreshold = 400;
 
     // Cancellation source for the 300 ms debounced segmentation updates.
     private CancellationTokenSource? _segmentationCts;
 
-    // Named mesh visuals — kept so we can remove/replace them individually.
+    // Named bone mesh visual — kept so we can remove/replace it individually.
     private ModelVisual3D? _boneMeshVisual;
-    private ModelVisual3D? _softTissueMeshVisual;
 
     // Set to true once the camera has been fitted to the model (first load only).
     private bool _hasZoomedToModel;
@@ -46,14 +42,13 @@ public partial class MainWindow : Window
     // Cancellation source for the final (full-resolution) segmentation pipeline.
     private CancellationTokenSource? _finalSegCts;
 
-    // Stores the confirmed final meshes (set after "Apply Segmentation" completes).
+    // Stores the confirmed final bone mesh (set after "Apply Segmentation" completes).
     private MeshData? _finalBoneMesh;
-    private MeshData? _finalSoftTissueMesh;
 
     // User-visible workflow steps (segmentation and segment ID run automatically).
     private static readonly (string Title, string Description)[] Steps =
     [
-        ("Import DICOM",      "Load CT or CBCT series"),
+        ("DICOM Viewer",      "Load and inspect CT or CBCT series"),
         ("Dental Casts",      "Align STL arches to CT model"),
         ("NHP",               "Natural head position"),
         ("Osteotomies",       "Plan virtual bone cuts"),
@@ -85,20 +80,8 @@ public partial class MainWindow : Window
         TriplanarView.CursorHuChanged += hu =>
             StatusMessages.Text = $"HU: {hu}";
 
-        Viewport3D.Children.Add(_grid);
-        Viewport3D.CameraChanged += OnViewportCameraChanged;
-
-        if (Viewport3D.Camera is PerspectiveCamera initCam)
-            _grid.Update(initCam);
-
         PopulateWorkflowSteps();
         RefreshStatusBar();
-    }
-
-    private void OnViewportCameraChanged(object sender, RoutedEventArgs e)
-    {
-        if (Viewport3D.Camera is PerspectiveCamera cam)
-            _grid.Update(cam);
     }
 
     // ── Open DICOM ─────────────────────────────────────────────────────────
@@ -170,8 +153,7 @@ public partial class MainWindow : Window
             // ── Phase 4: segmentation in background (non-blocking) ─────────
 
             _hasZoomedToModel = false;
-            BtnView3D.IsEnabled = false;
-            NoToolText.Visibility       = Visibility.Collapsed;
+            NoToolText.Visibility        = Visibility.Collapsed;
             SegmentationPanel.Visibility = Visibility.Visible;
             _ = RunInitialSegmentationAsync();
         }
@@ -206,19 +188,15 @@ public partial class MainWindow : Window
         try
         {
             await UpdateSegmentationPreviewAsync(ct);
-            BtnView3D.IsEnabled   = true;
             StatusActiveTool.Text = "Ready — 3D View available";
         }
         catch (OperationCanceledException)
         {
             // Slider was moved during initial load — the debounced update will
-            // run shortly with the new threshold. Enable the button so the user
-            // can switch to 3D once that update completes.
-            BtnView3D.IsEnabled = true;
+            // run shortly with the new threshold.
         }
         catch (Exception ex)
         {
-            BtnView3D.IsEnabled   = true;
             StatusActiveTool.Text = "Segmentation failed";
             StatusMessages.Text   = ex.Message;
         }
@@ -231,7 +209,7 @@ public partial class MainWindow : Window
         return raw;
     }
 
-    // ── Segmentation slider handlers ───────────────────────────────────────
+    // ── Segmentation slider handler ────────────────────────────────────────
 
     private void BoneThresholdSlider_ValueChanged(
         object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -240,16 +218,6 @@ public partial class MainWindow : Window
         // Guard: event fires during InitializeComponent before named fields are assigned.
         if (BoneThresholdLabel is not null)
             BoneThresholdLabel.Text = $"{_boneThreshold} HU";
-        ScheduleSegmentationUpdate();
-    }
-
-    private void SoftTissueThresholdSlider_ValueChanged(
-        object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        _softTissueThreshold = (short)Math.Clamp((int)e.NewValue, short.MinValue, short.MaxValue);
-        // Guard: same initialization-order issue as above.
-        if (SoftTissueThresholdLabel is not null)
-            SoftTissueThresholdLabel.Text = $"{_softTissueThreshold} HU";
         ScheduleSegmentationUpdate();
     }
 
@@ -279,7 +247,6 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             // Normal: user moved slider again or a newer request superseded this one.
-            // Not an error — the next debounced run will take over.
         }
         catch (Exception ex)
         {
@@ -288,8 +255,6 @@ public partial class MainWindow : Window
         }
         finally
         {
-            // Safe to dispose here: the old task has either finished or observed
-            // its cancellation before this finally block runs.
             oldCts?.Dispose();
         }
     }
@@ -305,8 +270,6 @@ public partial class MainWindow : Window
         var oldFinalCts = _finalSegCts;
         _finalSegCts = new CancellationTokenSource();
         var ct = _finalSegCts.Token;
-        // Button is disabled during processing so no concurrent clicks can occur;
-        // disposing the old CTS here (after cancel) is safe in this path.
         oldFinalCts?.Dispose();
 
         await RunFinalSegmentationAsync(ct);
@@ -329,19 +292,15 @@ public partial class MainWindow : Window
 
         try
         {
-            var (boneMesh, softMesh) = await _segmentationService.ApplyFinalSegmentationAsync(
+            var boneMesh = await _segmentationService.ApplyFinalSegmentationAsync(
                 _volumeData,
                 _boneThreshold,
-                _softTissueThreshold,
                 stepProgress,
                 ct);
 
-            _finalBoneMesh        = boneMesh;
-            _finalSoftTissueMesh  = softMesh;
+            _finalBoneMesh = boneMesh;
 
-            // Replace preview meshes with the final high-quality meshes.
             DisplayBoneMesh(boneMesh);
-            DisplaySoftTissueMesh(softMesh);
 
             if (!_hasZoomedToModel)
             {
@@ -352,7 +311,7 @@ public partial class MainWindow : Window
             ShowViewport3D();
 
             SegmentationStatusText.Text =
-                $"Final — Bone {boneMesh.TriangleCount:N0} tri · Skin {softMesh.TriangleCount:N0} tri";
+                $"Final — Bone {boneMesh.TriangleCount:N0} triangles";
             StatusActiveTool.Text = "Final segmentation applied";
         }
         catch (OperationCanceledException)
@@ -379,18 +338,12 @@ public partial class MainWindow : Window
 
         SegmentationStatusText.Text = "Updating…";
 
-        // Run both extractions in parallel on background threads.
-        var boneTask = _segmentationService.ExtractBoneSurfaceAsync(
+        var boneMesh = await _segmentationService.ExtractBoneSurfaceAsync(
             _volumeData, _boneThreshold, PreviewStride, ct: ct);
-        var softTask = _segmentationService.ExtractSoftTissueSurfaceAsync(
-            _volumeData, _softTissueThreshold, PreviewStride, ct: ct);
 
-        MeshData[] results = await Task.WhenAll(boneTask, softTask);
         ct.ThrowIfCancellationRequested();
 
-        // Opaque bone first, then semi-transparent skin (correct WPF 3D blending order).
-        DisplayBoneMesh(results[0]);
-        DisplaySoftTissueMesh(results[1]);
+        DisplayBoneMesh(boneMesh);
 
         if (!_hasZoomedToModel)
         {
@@ -398,22 +351,16 @@ public partial class MainWindow : Window
             _hasZoomedToModel = true;
         }
 
-        SegmentationStatusText.Text =
-            $"Bone {results[0].VertexCount:N0} verts · Skin {results[1].VertexCount:N0} verts";
+        SegmentationStatusText.Text = $"Preview — Bone {boneMesh.VertexCount:N0} verts";
     }
 
     // ── View toggle ────────────────────────────────────────────────────────
-
-    private void BtnView2D_Click(object sender, RoutedEventArgs e) => ShowTriplanarView();
-    private void BtnView3D_Click(object sender, RoutedEventArgs e) => ShowViewport3D();
 
     private void ShowTriplanarView()
     {
         TriplanarView.Visibility  = Visibility.Visible;
         Viewport3D.Visibility     = Visibility.Collapsed;
-        BtnView2D.IsChecked       = true;
-        BtnView3D.IsChecked       = false;
-        BtnToggleGrid.Visibility  = Visibility.Collapsed;
+        BtnToggleGrid.Visibility  = Visibility.Visible;
         StatusMessages.Text       = string.Empty;
     }
 
@@ -421,18 +368,11 @@ public partial class MainWindow : Window
     {
         TriplanarView.Visibility  = Visibility.Collapsed;
         Viewport3D.Visibility     = Visibility.Visible;
-        BtnView2D.IsChecked       = false;
-        BtnView3D.IsChecked       = true;
-        BtnToggleGrid.Visibility  = Visibility.Visible;
+        BtnToggleGrid.Visibility  = Visibility.Collapsed;
     }
 
     private void BtnToggleGrid_Click(object sender, RoutedEventArgs e)
-    {
-        if (BtnToggleGrid.IsChecked == true)
-            Viewport3D.Children.Add(_grid);
-        else
-            Viewport3D.Children.Remove(_grid);
-    }
+        => TriplanarView.SetGridVisible(BtnToggleGrid.IsChecked == true);
 
     // ── Workflow step list ─────────────────────────────────────────────────
 
@@ -518,11 +458,6 @@ public partial class MainWindow : Window
 
     // ── 3D mesh display ────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Updates the bone mesh in the viewport.
-    /// Bone is inserted before the soft-tissue mesh so it renders first
-    /// (opaque objects before transparent ones for correct WPF 3D alpha blending).
-    /// </summary>
     private void DisplayBoneMesh(MeshData data)
     {
         if (_boneMeshVisual != null)
@@ -537,37 +472,7 @@ public partial class MainWindow : Window
         var material = new DiffuseMaterial(new SolidColorBrush(color));
         var model    = new GeometryModel3D(geometry, material) { BackMaterial = material };
         _boneMeshVisual = new ModelVisual3D { Content = model };
-
-        var children = (IList<Visual3D>)Viewport3D.Children;
-        int stIdx = _softTissueMeshVisual != null
-            ? children.IndexOf(_softTissueMeshVisual)
-            : -1;
-
-        if (stIdx >= 0)
-            children.Insert(stIdx, _boneMeshVisual); // before soft tissue
-        else
-            Viewport3D.Children.Add(_boneMeshVisual);
-    }
-
-    /// <summary>
-    /// Updates the soft-tissue mesh in the viewport.
-    /// Always appended last so the semi-transparent skin renders over the opaque bone.
-    /// </summary>
-    private void DisplaySoftTissueMesh(MeshData data)
-    {
-        if (_softTissueMeshVisual != null)
-        {
-            Viewport3D.Children.Remove(_softTissueMeshVisual);
-            _softTissueMeshVisual = null;
-        }
-        if (data.VertexCount == 0) return;
-
-        var geometry = BuildGeometry(data);
-        var color    = Color.FromArgb(60, 255, 200, 170); // skin tone, semi-transparent
-        var material = new DiffuseMaterial(new SolidColorBrush(color));
-        var model    = new GeometryModel3D(geometry, material) { BackMaterial = material };
-        _softTissueMeshVisual = new ModelVisual3D { Content = model };
-        Viewport3D.Children.Add(_softTissueMeshVisual); // transparent objects last
+        Viewport3D.Children.Add(_boneMeshVisual);
     }
 
     private static MeshGeometry3D BuildGeometry(MeshData data)
@@ -592,9 +497,6 @@ public partial class MainWindow : Window
 
         return geometry;
     }
-
-    private void ResetCamera_Click(object sender, RoutedEventArgs e)
-        => Viewport3D.ZoomExtents();
 
     // ── Menu handlers ──────────────────────────────────────────────────────
 

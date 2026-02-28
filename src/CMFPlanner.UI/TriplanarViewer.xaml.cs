@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Shapes;
 using CMFPlanner.Core.Models;
 
@@ -33,6 +34,9 @@ public partial class TriplanarViewer : UserControl
     private enum Quadrant { None, Axial, Coronal, Sagittal }
     private Quadrant _expanded = Quadrant.None;
 
+    // 2D grid overlay
+    private bool _gridVisible = true;
+
     // ── Public API ────────────────────────────────────────────────────────
 
     /// <summary>Fired when cursor moves over a slice; argument is the HU value under cursor.</summary>
@@ -41,6 +45,16 @@ public partial class TriplanarViewer : UserControl
     public TriplanarViewer()
     {
         InitializeComponent();
+        AxialBorder.SizeChanged    += (_, _) => UpdateAllGridOverlays();
+        CoronalBorder.SizeChanged  += (_, _) => UpdateAllGridOverlays();
+        SagittalBorder.SizeChanged += (_, _) => UpdateAllGridOverlays();
+    }
+
+    /// <summary>Shows or hides the metric reference grid on all three slice panels.</summary>
+    public void SetGridVisible(bool visible)
+    {
+        _gridVisible = visible;
+        UpdateAllGridOverlays();
     }
 
     /// <summary>
@@ -54,9 +68,9 @@ public partial class TriplanarViewer : UserControl
         _cz = volume.SliceCount / 2;
 
         // Size the Viewbox inner grids to match bitmap dimensions
-        SetGridSize(AxialGrid,    AxialCanvas,    volume.Columns, volume.Rows);
-        SetGridSize(CoronalGrid,  CoronalCanvas,  volume.Columns, volume.SliceCount);
-        SetGridSize(SagittalGrid, SagittalCanvas, volume.Rows,    volume.SliceCount);
+        SetGridSize(AxialGrid,    AxialCanvas,    AxialGridCanvas,    volume.Columns, volume.Rows);
+        SetGridSize(CoronalGrid,  CoronalCanvas,  CoronalGridCanvas,  volume.Columns, volume.SliceCount);
+        SetGridSize(SagittalGrid, SagittalCanvas, SagittalGridCanvas, volume.Rows,    volume.SliceCount);
 
         // Populate info panel
         InfoPatient.Text    = patientLabel;
@@ -101,10 +115,80 @@ public partial class TriplanarViewer : UserControl
         l.X1 = x1; l.X2 = x2; l.Y1 = y1; l.Y2 = y2;
     }
 
-    private static void SetGridSize(FrameworkElement grid, FrameworkElement canvas, int w, int h)
+    private static void SetGridSize(FrameworkElement grid, FrameworkElement canvas, FrameworkElement gridCanvas, int w, int h)
     {
-        grid.Width   = w; grid.Height   = h;
-        canvas.Width = w; canvas.Height = h;
+        grid.Width        = w; grid.Height        = h;
+        canvas.Width      = w; canvas.Height      = h;
+        gridCanvas.Width  = w; gridCanvas.Height  = h;
+    }
+
+    // ── 2D metric grid overlay ────────────────────────────────────────────
+
+    private void UpdateAllGridOverlays()
+    {
+        if (_volume == null) return;
+        DrawGridOverlay(AxialGridCanvas,
+            _volume.Columns, _volume.SpacingX, _volume.Rows,       _volume.SpacingY,
+            AxialBorder.ActualWidth,   AxialBorder.ActualHeight);
+        DrawGridOverlay(CoronalGridCanvas,
+            _volume.Columns, _volume.SpacingX, _volume.SliceCount, _volume.SpacingZ,
+            CoronalBorder.ActualWidth,  CoronalBorder.ActualHeight);
+        DrawGridOverlay(SagittalGridCanvas,
+            _volume.Rows,    _volume.SpacingY, _volume.SliceCount, _volume.SpacingZ,
+            SagittalBorder.ActualWidth, SagittalBorder.ActualHeight);
+    }
+
+    private void DrawGridOverlay(
+        Canvas canvas,
+        double imgW, double spacingX,
+        double imgH, double spacingY,
+        double borderW, double borderH)
+    {
+        canvas.Children.Clear();
+        if (!_gridVisible || _volume == null || borderW <= 0 || borderH <= 0) return;
+
+        // Viewbox effective scale: pixels per voxel (Stretch=Uniform)
+        double scale    = Math.Min(borderW / imgW, borderH / imgH);
+        double pxPerMm  = scale / spacingX;
+        double px10mm   = pxPerMm * 10.0;
+
+        // Choose mm spacing: 10 mm default, 5 mm zoomed, 1 mm maximum zoom
+        double mm = px10mm < 30.0 ? 10.0
+                  : px10mm < 80.0 ?  5.0
+                  :                   1.0;
+
+        double voxX       = mm / spacingX;          // voxel interval in X
+        double voxY       = mm / spacingY;          // voxel interval in Y
+        int    majorEvery = Math.Max(1, (int)Math.Round(10.0 / mm));  // major every 10 mm
+
+        var minor = new SolidColorBrush(Color.FromArgb(55,  255, 255, 255));
+        var major = new SolidColorBrush(Color.FromArgb(110, 255, 255, 255));
+
+        // Vertical lines (constant X)
+        for (double x = 0, i = 0; x <= imgW + voxX * 0.5; x += voxX, i++)
+        {
+            bool isMajor = (int)i % majorEvery == 0;
+            canvas.Children.Add(new Line
+            {
+                X1 = x, X2 = x, Y1 = 0, Y2 = imgH,
+                Stroke          = isMajor ? major : minor,
+                StrokeThickness = isMajor ? 0.6 : 0.4,
+                IsHitTestVisible= false
+            });
+        }
+
+        // Horizontal lines (constant Y)
+        for (double y = 0, i = 0; y <= imgH + voxY * 0.5; y += voxY, i++)
+        {
+            bool isMajor = (int)i % majorEvery == 0;
+            canvas.Children.Add(new Line
+            {
+                X1 = 0, X2 = imgW, Y1 = y, Y2 = y,
+                Stroke          = isMajor ? major : minor,
+                StrokeThickness = isMajor ? 0.6 : 0.4,
+                IsHitTestVisible= false
+            });
+        }
     }
 
     private void UpdateWlDisplay()
