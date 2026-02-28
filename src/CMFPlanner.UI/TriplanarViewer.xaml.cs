@@ -44,10 +44,6 @@ public partial class TriplanarViewer : UserControl
     private MeshData? _boneMesh;
     private Point3D   _orbitTarget = new(0, 0, 0);
 
-    // Right-click orbit state
-    private bool  _orbitActive;
-    private Point _orbitLast;
-
     // ── Public API ────────────────────────────────────────────────────────
 
     /// <summary>Fired when cursor moves over a slice; argument is the HU value under cursor.</summary>
@@ -56,12 +52,20 @@ public partial class TriplanarViewer : UserControl
     /// <summary>Fired whenever Window or Level changes (drag or preset); args are (ww, wl).</summary>
     public event Action<int, int>? WlChanged;
 
+    /// <summary>Fired when a W/L preset button is clicked. Passes the preset name (e.g. "Bone", "Soft Tissue").</summary>
+    public event Action<string>? PresetSelected;
+
+    /// <summary>Fired when the live bone slider changes; argument is the new HU threshold.</summary>
+    public event Action<int>? LiveThresholdChanged;
+
     public TriplanarViewer()
     {
         InitializeComponent();
-        AxialBorder.SizeChanged    += (_, _) => UpdateAllGridOverlays();
-        CoronalBorder.SizeChanged  += (_, _) => UpdateAllGridOverlays();
-        SagittalBorder.SizeChanged += (_, _) => UpdateAllGridOverlays();
+
+        // Use custom sizing to force synchronized zooming across all 3 viewports
+        AxialBorder.SizeChanged    += OnViewportSizeChanged;
+        CoronalBorder.SizeChanged  += OnViewportSizeChanged;
+        SagittalBorder.SizeChanged += OnViewportSizeChanged;
 
         // Escape collapses any expanded quadrant
         Loaded += (_, _) =>
@@ -98,18 +102,77 @@ public partial class TriplanarViewer : UserControl
         _cy = volume.Rows     / 2;
         _cz = volume.SliceCount / 2;
 
-        // Size the Viewbox inner grids to match bitmap dimensions
+        // Size the inner grids to match bitmap pixel dimensions
         SetGridSize(AxialGrid,    AxialCanvas,    AxialGridCanvas,    volume.Columns, volume.Rows);
         SetGridSize(CoronalGrid,  CoronalCanvas,  CoronalGridCanvas,  volume.Columns, volume.SliceCount);
         SetGridSize(SagittalGrid, SagittalCanvas, SagittalGridCanvas, volume.Rows,    volume.SliceCount);
 
-        // Isotropic aspect ratio: scale each inner grid by physical voxel spacing so the
-        // Viewbox sees physical-mm dimensions and preserves correct anatomical proportions.
-        AxialGrid.LayoutTransform    = new ScaleTransform(volume.SpacingX, volume.SpacingY);
-        CoronalGrid.LayoutTransform  = new ScaleTransform(volume.SpacingX, volume.SpacingZ);
-        SagittalGrid.LayoutTransform = new ScaleTransform(volume.SpacingY, volume.SpacingZ);
-
+        SyncZoom();
         RefreshAll();
+    }
+
+    private void OnViewportSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateAllGridOverlays();
+        SyncZoom();
+    }
+
+    /// <summary>
+    /// Computes a single unified px-per-mm scale factor across all three 2D panels
+    /// and applies a combined LayoutTransform (spacing × zoom) to each grid.
+    /// This guarantees that 1 physical mm occupies the same number of screen pixels
+    /// in every viewport, so all three images appear at the same scale.
+    /// </summary>
+    private void SyncZoom()
+    {
+        if (_volume == null) return;
+
+        // Physical dimensions of each view in mm
+        double physAxialW    = _volume.Columns    * _volume.SpacingX;
+        double physAxialH    = _volume.Rows       * _volume.SpacingY;
+        double physCoronalW  = _volume.Columns    * _volume.SpacingX;
+        double physCoronalH  = _volume.SliceCount * _volume.SpacingZ;
+        double physSagittalW = _volume.Rows       * _volume.SpacingY;
+        double physSagittalH = _volume.SliceCount * _volume.SpacingZ;
+
+        // Available viewport pixel sizes
+        double aw = AxialBorder.ActualWidth,    ah = AxialBorder.ActualHeight;
+        double cw = CoronalBorder.ActualWidth,  ch = CoronalBorder.ActualHeight;
+        double sw = SagittalBorder.ActualWidth,  sh = SagittalBorder.ActualHeight;
+
+        if (aw <= 0 || cw <= 0 || sw <= 0) return;
+
+        if (_expanded != Quadrant.None)
+        {
+            // When expanded, let the single visible panel fill its space
+            double pxPerMm;
+            if (_expanded == Quadrant.Axial)
+                pxPerMm = Math.Min(aw / physAxialW, ah / physAxialH);
+            else if (_expanded == Quadrant.Coronal)
+                pxPerMm = Math.Min(cw / physCoronalW, ch / physCoronalH);
+            else if (_expanded == Quadrant.Sagittal)
+                pxPerMm = Math.Min(sw / physSagittalW, sh / physSagittalH);
+            else
+                return; // 3D panel expanded, nothing to do
+
+            AxialGrid.LayoutTransform    = new ScaleTransform(pxPerMm * _volume.SpacingX, pxPerMm * _volume.SpacingY);
+            CoronalGrid.LayoutTransform  = new ScaleTransform(pxPerMm * _volume.SpacingX, pxPerMm * _volume.SpacingZ);
+            SagittalGrid.LayoutTransform = new ScaleTransform(pxPerMm * _volume.SpacingY, pxPerMm * _volume.SpacingZ);
+            return;
+        }
+
+        // Compute per-panel max px/mm if each panel used its full area
+        double scaleAxial    = Math.Min(aw / physAxialW,    ah / physAxialH);
+        double scaleCoronal  = Math.Min(cw / physCoronalW,  ch / physCoronalH);
+        double scaleSagittal = Math.Min(sw / physSagittalW, sh / physSagittalH);
+
+        // Unified scale = smallest of the three, so 1 mm = same screen px everywhere
+        double uni = Math.Min(scaleAxial, Math.Min(scaleCoronal, scaleSagittal));
+
+        // Apply combined transform: voxel → mm (spacing) → screen (zoom)
+        AxialGrid.LayoutTransform    = new ScaleTransform(uni * _volume.SpacingX, uni * _volume.SpacingY);
+        CoronalGrid.LayoutTransform  = new ScaleTransform(uni * _volume.SpacingX, uni * _volume.SpacingZ);
+        SagittalGrid.LayoutTransform = new ScaleTransform(uni * _volume.SpacingY, uni * _volume.SpacingZ);
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
@@ -234,6 +297,7 @@ public partial class TriplanarViewer : UserControl
         _ww = 400; _wl = 40;
         RefreshAll();
         WlChanged?.Invoke(_ww, _wl);
+        PresetSelected?.Invoke("Soft Tissue");
     }
 
     private void BtnPresetBone_Click(object sender, RoutedEventArgs e)
@@ -241,6 +305,7 @@ public partial class TriplanarViewer : UserControl
         _ww = 2000; _wl = 400;
         RefreshAll();
         WlChanged?.Invoke(_ww, _wl);
+        PresetSelected?.Invoke("Bone");
     }
 
     // ── Right-drag W/L ────────────────────────────────────────────────────
@@ -393,7 +458,8 @@ public partial class TriplanarViewer : UserControl
             return;
         }
 
-        NoMeshText.Visibility = Visibility.Collapsed;
+        NoMeshText.Visibility      = Visibility.Collapsed;
+        ThresholdOverlay.Visibility = Visibility.Visible;
 
         var geo = BuildBoneGeometry(_boneMesh);
 
@@ -442,59 +508,45 @@ public partial class TriplanarViewer : UserControl
         return geo;
     }
 
-    // ── 3D panel mouse handlers ───────────────────────────────────────────
+    // ── 3D panel mouse + live slider handlers ────────────────────────────
 
+    // Double-click expands/collapses the 3D preview.
     private void Preview3D_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
         {
             ToggleExpand(Quadrant.Preview3D);
-            e.Handled = true; // stop HelixToolkit starting rotation on the second click
+            e.Handled = true;
         }
+        // Single clicks pass through to HelixToolkit (trackball rotation)
     }
 
-    private void Preview3D_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    // Live bone threshold slider ─────────────────────────────────────────
+    private System.Windows.Threading.DispatcherTimer? _liveSliderTimer;
+
+    private void LiveBoneSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        _orbitActive = true;
-        _orbitLast   = e.GetPosition(Preview3D);
-        Preview3D.CaptureMouse();
-        e.Handled = true;   // suppress context menu and HelixToolkit zoom
-    }
+        // Guard: fires during InitializeComponent before named elements exist
+        if (LiveBoneLabel is null) return;
 
-    private void Preview3D_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        _orbitActive = false;
-        Preview3D.ReleaseMouseCapture();
-        e.Handled = true;
-    }
+        int hu = (int)e.NewValue;
+        LiveBoneLabel.Text = $"{hu} HU";
 
-    private void Preview3D_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (!_orbitActive || Preview3D.Camera is not PerspectiveCamera cam) return;
-        var pos = e.GetPosition(Preview3D);
-        double dx = pos.X - _orbitLast.X;
-        double dy = pos.Y - _orbitLast.Y;
-        _orbitLast = pos;
-        OrbitCamera(cam, _orbitTarget, dx, dy);
-    }
-
-    private static void OrbitCamera(PerspectiveCamera cam, Point3D target, double dx, double dy)
-    {
-        const double sensitivity = 0.4 * Math.PI / 180.0;
-        var offset = cam.Position - target;
-        double r     = offset.Length;
-        double theta = Math.Atan2(offset.Y, offset.X) - dx * sensitivity;
-        double phi   = Math.Acos(Math.Clamp(offset.Z / r, -1.0, 1.0)) + dy * sensitivity;
-        phi = Math.Clamp(phi, 0.04, Math.PI - 0.04);   // prevent gimbal pole
-
-        var newOffset = new Vector3D(
-            r * Math.Sin(phi) * Math.Cos(theta),
-            r * Math.Sin(phi) * Math.Sin(theta),
-            r * Math.Cos(phi));
-
-        cam.Position      = target + newOffset;
-        cam.LookDirection = -newOffset;
-        cam.UpDirection   = new Vector3D(0, 0, 1);
+        // Debounce: wait 180 ms after last drag event before firing regeneration
+        if (_liveSliderTimer == null)
+        {
+            _liveSliderTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(180)
+            };
+            _liveSliderTimer.Tick += (_, _) =>
+            {
+                _liveSliderTimer.Stop();
+                LiveThresholdChanged?.Invoke((int)LiveBoneSlider.Value);
+            };
+        }
+        _liveSliderTimer.Stop();
+        _liveSliderTimer.Start();
     }
 
     // ── Expand / collapse ─────────────────────────────────────────────────
@@ -540,6 +592,7 @@ public partial class TriplanarViewer : UserControl
         Preview3D.ShowCoordinateSystem = (q == Quadrant.Preview3D);
 
         _expanded = q;
+        SyncZoom();
     }
 
     private void CollapseAll()
@@ -549,9 +602,11 @@ public partial class TriplanarViewer : UserControl
         RestoreQuadrant(SagittalBorder, 2, 0);
         RestoreQuadrant(InfoBorder,     2, 2);
 
-        HSeparator.Visibility         = Visibility.Visible;
-        VSeparator.Visibility         = Visibility.Visible;
+        HSeparator.Visibility          = Visibility.Visible;
+        VSeparator.Visibility          = Visibility.Visible;
         Preview3D.ShowCoordinateSystem = false;
+
+        SyncZoom();
     }
 
     private static void RestoreQuadrant(Border b, int row, int col)

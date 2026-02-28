@@ -124,7 +124,7 @@
                           Click="MenuToggleWorkflow_Click"/>
                 <MenuItem x:Name="MenuToggleProperties"
                           Header="Properties Panel"
-                          IsCheckable="True" IsChecked="True"
+                          IsCheckable="True" IsChecked="False"
                           Click="MenuToggleProperties_Click"/>
             </MenuItem>
             <MenuItem Header="_Help" Foreground="#CCCCCC">
@@ -158,15 +158,6 @@
                               Margin="2,0"
                               ToolTip="Natural Head Position — orient skull for all measurements">
                     NHP
-                </ToggleButton>
-
-                <!-- Soft Tissue — placeholder, coming in a future release -->
-                <ToggleButton x:Name="BtnSoftTissue"
-                              Style="{StaticResource PersistentToggle}"
-                              Margin="2,0"
-                              IsEnabled="False"
-                              ToolTip="Soft tissue segmentation — coming soon">
-                    Soft Tissue
                 </ToggleButton>
 
 
@@ -215,8 +206,8 @@
                 <ColumnDefinition x:Name="LeftColumn"  Width="200" MinWidth="140"/>
                 <ColumnDefinition                       Width="3"/>
                 <ColumnDefinition                       Width="*"   MinWidth="400"/>
-                <ColumnDefinition                       Width="3"/>
-                <ColumnDefinition x:Name="RightColumn" Width="250" MinWidth="180"/>
+                <ColumnDefinition                       Width="0"/>
+                <ColumnDefinition x:Name="RightColumn" Width="0"/>
             </Grid.ColumnDefinitions>
 
             <!-- ── Left: Workflow Steps ──────────────────────────── -->
@@ -308,10 +299,12 @@
                           HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext"
-                          ResizeDirection="Columns"/>
+                          ResizeDirection="Columns"
+                          Visibility="Collapsed"/>
 
             <!-- ── Right: Properties Panel ───────────────────────── -->
-            <Border x:Name="RightPanel" Grid.Column="4" Background="#252526">
+            <Border x:Name="RightPanel" Grid.Column="4" Background="#252526"
+                    Visibility="Collapsed">
                 <DockPanel>
                     <!-- Header -->
                     <Border DockPanel.Dock="Top"
@@ -353,13 +346,13 @@
                                     </Grid.ColumnDefinitions>
                                     <Slider x:Name="BoneThresholdSlider"
                                             Grid.Column="0"
-                                            Minimum="-1000" Maximum="3000" Value="400"
+                                            Minimum="-1000" Maximum="3000" Value="300"
                                             IsSnapToTickEnabled="False"
                                             VerticalAlignment="Center"
                                             ValueChanged="BoneThresholdSlider_ValueChanged"/>
                                     <TextBlock x:Name="BoneThresholdLabel"
                                                Grid.Column="1"
-                                               Text="400 HU"
+                                               Text="300 HU"
                                                Foreground="#CCCCCC" FontSize="11"
                                                VerticalAlignment="Center"
                                                Margin="6,0,0,0"/>

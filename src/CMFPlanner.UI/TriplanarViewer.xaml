@@ -64,24 +64,23 @@
         <!-- ══ AXIAL  (top-left) ══════════════════════════════════════ -->
         <Border x:Name="AxialBorder" Grid.Row="0" Grid.Column="0" ClipToBounds="True">
             <Grid>
-                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Grid x:Name="AxialGrid" Width="1" Height="1" Background="Black"
-                          Cursor="Cross"
-                          MouseLeftButtonDown="AxialGrid_MouseLeftButtonDown"
-                          MouseMove="AxialGrid_MouseMove"
-                          MouseRightButtonDown="AnyGrid_RightButtonDown"
-                          MouseRightButtonUp="AnyGrid_RightButtonUp"
-                          MouseWheel="AxialGrid_MouseWheel">
-                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
-                        <Image x:Name="AxialImage" Stretch="Fill"
-                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <Canvas x:Name="AxialGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
-                        <Canvas x:Name="AxialCanvas" Width="1" Height="1" IsHitTestVisible="False">
-                            <Line x:Name="AxialHLine" Stroke="#44BB44" StrokeThickness="0.8"/>
-                            <Line x:Name="AxialVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
-                        </Canvas>
-                    </Grid>
-                </Viewbox>
+                <Grid x:Name="AxialGrid" Width="1" Height="1" Background="Black"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Cursor="Cross"
+                      MouseLeftButtonDown="AxialGrid_MouseLeftButtonDown"
+                      MouseMove="AxialGrid_MouseMove"
+                      MouseRightButtonDown="AnyGrid_RightButtonDown"
+                      MouseRightButtonUp="AnyGrid_RightButtonUp"
+                      MouseWheel="AxialGrid_MouseWheel">
+                    <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                    <Image x:Name="AxialImage" Stretch="Fill"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Canvas x:Name="AxialGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
+                    <Canvas x:Name="AxialCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                        <Line x:Name="AxialHLine" Stroke="#44BB44" StrokeThickness="0.8"/>
+                        <Line x:Name="AxialVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
+                    </Canvas>
+                </Grid>
                 <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
                         Padding="5,2" Margin="4" IsHitTestVisible="False">
                     <TextBlock Text="AXIAL" Foreground="#44BB44" FontSize="10" FontWeight="SemiBold"/>
@@ -92,24 +91,23 @@
         <!-- ══ CORONAL  (top-right) ══════════════════════════════════ -->
         <Border x:Name="CoronalBorder" Grid.Row="0" Grid.Column="2" ClipToBounds="True">
             <Grid>
-                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Grid x:Name="CoronalGrid" Width="1" Height="1" Background="Black"
-                          Cursor="Cross"
-                          MouseLeftButtonDown="CoronalGrid_MouseLeftButtonDown"
-                          MouseMove="CoronalGrid_MouseMove"
-                          MouseRightButtonDown="AnyGrid_RightButtonDown"
-                          MouseRightButtonUp="AnyGrid_RightButtonUp"
-                          MouseWheel="CoronalGrid_MouseWheel">
-                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
-                        <Image x:Name="CoronalImage" Stretch="Fill"
-                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <Canvas x:Name="CoronalGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
-                        <Canvas x:Name="CoronalCanvas" Width="1" Height="1" IsHitTestVisible="False">
-                            <Line x:Name="CoronalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
-                            <Line x:Name="CoronalVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
-                        </Canvas>
-                    </Grid>
-                </Viewbox>
+                <Grid x:Name="CoronalGrid" Width="1" Height="1" Background="Black"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Cursor="Cross"
+                      MouseLeftButtonDown="CoronalGrid_MouseLeftButtonDown"
+                      MouseMove="CoronalGrid_MouseMove"
+                      MouseRightButtonDown="AnyGrid_RightButtonDown"
+                      MouseRightButtonUp="AnyGrid_RightButtonUp"
+                      MouseWheel="CoronalGrid_MouseWheel">
+                    <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                    <Image x:Name="CoronalImage" Stretch="Fill"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Canvas x:Name="CoronalGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
+                    <Canvas x:Name="CoronalCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                        <Line x:Name="CoronalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
+                        <Line x:Name="CoronalVLine" Stroke="#FF8800" StrokeThickness="0.8"/>
+                    </Canvas>
+                </Grid>
                 <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
                         Padding="5,2" Margin="4" IsHitTestVisible="False">
                     <TextBlock Text="CORONAL" Foreground="#4488FF" FontSize="10" FontWeight="SemiBold"/>
@@ -120,24 +118,23 @@
         <!-- ══ SAGITTAL  (bottom-left) ══════════════════════════════ -->
         <Border x:Name="SagittalBorder" Grid.Row="2" Grid.Column="0" ClipToBounds="True">
             <Grid>
-                <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Grid x:Name="SagittalGrid" Width="1" Height="1" Background="Black"
-                          Cursor="Cross"
-                          MouseLeftButtonDown="SagittalGrid_MouseLeftButtonDown"
-                          MouseMove="SagittalGrid_MouseMove"
-                          MouseRightButtonDown="AnyGrid_RightButtonDown"
-                          MouseRightButtonUp="AnyGrid_RightButtonUp"
-                          MouseWheel="SagittalGrid_MouseWheel">
-                        <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
-                        <Image x:Name="SagittalImage" Stretch="Fill"
-                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <Canvas x:Name="SagittalGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
-                        <Canvas x:Name="SagittalCanvas" Width="1" Height="1" IsHitTestVisible="False">
-                            <Line x:Name="SagittalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
-                            <Line x:Name="SagittalVLine" Stroke="#44BB44" StrokeThickness="0.8"/>
-                        </Canvas>
-                    </Grid>
-                </Viewbox>
+                <Grid x:Name="SagittalGrid" Width="1" Height="1" Background="Black"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Cursor="Cross"
+                      MouseLeftButtonDown="SagittalGrid_MouseLeftButtonDown"
+                      MouseMove="SagittalGrid_MouseMove"
+                      MouseRightButtonDown="AnyGrid_RightButtonDown"
+                      MouseRightButtonUp="AnyGrid_RightButtonUp"
+                      MouseWheel="SagittalGrid_MouseWheel">
+                    <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
+                    <Image x:Name="SagittalImage" Stretch="Fill"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Canvas x:Name="SagittalGridCanvas" Width="1" Height="1" IsHitTestVisible="False"/>
+                    <Canvas x:Name="SagittalCanvas" Width="1" Height="1" IsHitTestVisible="False">
+                        <Line x:Name="SagittalHLine" Stroke="#4488FF" StrokeThickness="0.8"/>
+                        <Line x:Name="SagittalVLine" Stroke="#44BB44" StrokeThickness="0.8"/>
+                    </Canvas>
+                </Grid>
                 <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
                         Padding="5,2" Margin="4" IsHitTestVisible="False">
                     <TextBlock Text="SAGITTAL" Foreground="#FF8800" FontSize="10" FontWeight="SemiBold"/>
@@ -150,19 +147,16 @@
                 Background="#111111">
             <Grid PreviewMouseLeftButtonDown="Preview3D_PreviewMouseLeftButtonDown">
 
-                <!-- HelixViewport3D — bone preview -->
+                <!-- HelixViewport3D: all interactions owned by HelixToolkit (touchpad + mouse) -->
                 <helix:HelixViewport3D x:Name="Preview3D"
                                        Background="#111111"
                                        ShowCoordinateSystem="False"
                                        ShowFrameRate="False"
                                        IsRotationEnabled="True"
-                                       IsMoveEnabled="True"
+                                       IsMoveEnabled="False"
                                        IsPanEnabled="True"
                                        IsZoomEnabled="True"
-                                       RotateAroundMouseDownPoint="True"
-                                       PreviewMouseRightButtonDown="Preview3D_PreviewMouseRightButtonDown"
-                                       PreviewMouseRightButtonUp="Preview3D_PreviewMouseRightButtonUp"
-                                       MouseMove="Preview3D_MouseMove">
+                                       RotateAroundMouseDownPoint="True">
                     <helix:HelixViewport3D.ContextMenu>
                         <x:Null/>
                     </helix:HelixViewport3D.ContextMenu>
@@ -170,7 +164,7 @@
 
                 <!-- No-mesh placeholder -->
                 <TextBlock x:Name="NoMeshText"
-                           Text="Apply segmentation&#10;to see 3D preview"
+                           Text="Load DICOM to see 3D preview"
                            Foreground="#444444" FontSize="11"
                            TextAlignment="Center" LineHeight="20"
                            HorizontalAlignment="Center"
@@ -183,15 +177,34 @@
                     <TextBlock Text="3D PREVIEW" Foreground="#FF8800" FontSize="10" FontWeight="SemiBold"/>
                 </Border>
 
-                <!-- W/L presets — compact overlay bottom of panel -->
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                            Margin="0,0,0,6" IsHitTestVisible="True">
-                    <Button Content="Soft Tissue" Style="{StaticResource PresetBtn}"
-                            Click="BtnPresetSoftTissue_Click" ToolTip="W=400 L=40"/>
-                    <Button Content="Bone" Style="{StaticResource PresetBtn}"
-                            Click="BtnPresetBone_Click" ToolTip="W=2000 L=400"/>
-                </StackPanel>
+                <!-- Live bone threshold slider overlay -->
+                <Border x:Name="ThresholdOverlay"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                        Background="#CC1A1A1A" Padding="10,8"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Bone HU " Foreground="#AAAAAA"
+                                   FontSize="10" VerticalAlignment="Center"/>
+                        <Slider x:Name="LiveBoneSlider"
+                                Grid.Column="1"
+                                Minimum="0" Maximum="1500" Value="350"
+                                VerticalAlignment="Center"
+                                IsSnapToTickEnabled="False"
+                                ValueChanged="LiveBoneSlider_ValueChanged"
+                                ToolTip="Drag to adjust bone threshold"/>
+                        <TextBlock x:Name="LiveBoneLabel"
+                                   Grid.Column="2"
+                                   Text="350 HU"
+                                   Foreground="#CCCCCC" FontSize="10"
+                                   VerticalAlignment="Center" Margin="8,0,0,0" Width="55"/>
+                    </Grid>
+                </Border>
 
             </Grid>
         </Border>

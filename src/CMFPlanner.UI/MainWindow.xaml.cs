@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     private VolumeData?  _volumeData;
 
     // Bone threshold (Hounsfield Units), updated by live slider.
-    private short _boneThreshold = 400;
+    private short _boneThreshold = 350;
 
     // Cancellation source for the 300 ms debounced segmentation updates.
     private CancellationTokenSource? _segmentationCts;
@@ -37,7 +37,7 @@ public partial class MainWindow : Window
     private bool _hasZoomedToModel;
 
     // Stride for live-preview marching cubes (lower = faster, coarser mesh).
-    private const int PreviewStride = 3;
+    private int _previewStride = 2; // Reduced from 3 to 2 for better default quality per user request
 
     // Cancellation source for the final (full-resolution) segmentation pipeline.
     private CancellationTokenSource? _finalSegCts;
@@ -82,6 +82,27 @@ public partial class MainWindow : Window
 
         TriplanarView.WlChanged += (ww, wl) =>
             StatusMessages.Text = $"W: {ww}  L: {wl}";
+
+        TriplanarView.PresetSelected += preset =>
+        {
+            if (preset == "Soft Tissue")
+            {
+                _boneThreshold = -300;
+                ScheduleSegmentationUpdate();
+            }
+            else if (preset == "Bone")
+            {
+                _boneThreshold = 350;
+                ScheduleSegmentationUpdate();
+            }
+        };
+
+        // Live bone slider in 3D preview panel
+        TriplanarView.LiveThresholdChanged += hu =>
+        {
+            _boneThreshold = (short)Math.Clamp(hu, short.MinValue, short.MaxValue);
+            ScheduleSegmentationUpdate();
+        };
 
         PopulateWorkflowSteps();
         RefreshStatusBar();
@@ -342,7 +363,7 @@ public partial class MainWindow : Window
         SegmentationStatusText.Text = "Updating…";
 
         var boneMesh = await _segmentationService.ExtractBoneSurfaceAsync(
-            _volumeData, _boneThreshold, PreviewStride, ct: ct);
+            _volumeData, _boneThreshold, _previewStride, ct: ct);
 
         ct.ThrowIfCancellationRequested();
 
