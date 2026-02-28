@@ -2,8 +2,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using CMFPlanner.Core.Models;
+using CMFPlanner.Visualization;
+using HelixToolkit.Wpf;
 
 namespace CMFPlanner.UI;
 
@@ -23,7 +26,7 @@ public partial class TriplanarViewer : UserControl
     private int _cx, _cy, _cz;
 
     // Window/Level (Hounsfield units)
-    private int _ww = 400, _wl = 40;                  // soft-tissue default
+    private int _ww = 2000, _wl = 400;                // bone window default
 
     // Right-drag W/L state
     private bool  _wlDragging;
@@ -31,16 +34,27 @@ public partial class TriplanarViewer : UserControl
     private int   _wlDragStartWw, _wlDragStartWl;
 
     // Expanded quadrant
-    private enum Quadrant { None, Axial, Coronal, Sagittal }
+    private enum Quadrant { None, Axial, Coronal, Sagittal, Preview3D }
     private Quadrant _expanded = Quadrant.None;
 
     // 2D grid overlay
     private bool _gridVisible = true;
 
+    // 3D bone preview
+    private MeshData? _boneMesh;
+    private Point3D   _orbitTarget = new(0, 0, 0);
+
+    // Right-click orbit state
+    private bool  _orbitActive;
+    private Point _orbitLast;
+
     // ── Public API ────────────────────────────────────────────────────────
 
     /// <summary>Fired when cursor moves over a slice; argument is the HU value under cursor.</summary>
     public event Action<short>? CursorHuChanged;
+
+    /// <summary>Fired whenever Window or Level changes (drag or preset); args are (ww, wl).</summary>
+    public event Action<int, int>? WlChanged;
 
     public TriplanarViewer()
     {
@@ -48,6 +62,23 @@ public partial class TriplanarViewer : UserControl
         AxialBorder.SizeChanged    += (_, _) => UpdateAllGridOverlays();
         CoronalBorder.SizeChanged  += (_, _) => UpdateAllGridOverlays();
         SagittalBorder.SizeChanged += (_, _) => UpdateAllGridOverlays();
+
+        // Escape collapses any expanded quadrant
+        Loaded += (_, _) =>
+        {
+            var win = Window.GetWindow(this);
+            if (win != null) win.PreviewKeyDown += OnWindowKeyDown;
+        };
+    }
+
+    private void OnWindowKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _expanded != Quadrant.None)
+        {
+            CollapseAll();
+            _expanded = Quadrant.None;
+            e.Handled = true;
+        }
     }
 
     /// <summary>Shows or hides the metric reference grid on all three slice panels.</summary>
@@ -72,10 +103,11 @@ public partial class TriplanarViewer : UserControl
         SetGridSize(CoronalGrid,  CoronalCanvas,  CoronalGridCanvas,  volume.Columns, volume.SliceCount);
         SetGridSize(SagittalGrid, SagittalCanvas, SagittalGridCanvas, volume.Rows,    volume.SliceCount);
 
-        // Populate info panel
-        InfoPatient.Text    = patientLabel;
-        InfoDimensions.Text = $"{volume.Columns} × {volume.Rows} × {volume.SliceCount} vx";
-        InfoSpacing.Text    = $"{volume.SpacingX:F2} × {volume.SpacingY:F2} × {volume.SpacingZ:F2} mm";
+        // Isotropic aspect ratio: scale each inner grid by physical voxel spacing so the
+        // Viewbox sees physical-mm dimensions and preserves correct anatomical proportions.
+        AxialGrid.LayoutTransform    = new ScaleTransform(volume.SpacingX, volume.SpacingY);
+        CoronalGrid.LayoutTransform  = new ScaleTransform(volume.SpacingX, volume.SpacingZ);
+        SagittalGrid.LayoutTransform = new ScaleTransform(volume.SpacingY, volume.SpacingZ);
 
         RefreshAll();
     }
@@ -147,10 +179,12 @@ public partial class TriplanarViewer : UserControl
         canvas.Children.Clear();
         if (!_gridVisible || _volume == null || borderW <= 0 || borderH <= 0) return;
 
-        // Viewbox effective scale: pixels per voxel (Stretch=Uniform)
-        double scale    = Math.Min(borderW / imgW, borderH / imgH);
-        double pxPerMm  = scale / spacingX;
-        double px10mm   = pxPerMm * 10.0;
+        // Physical dimensions in mm (Viewbox sees these after LayoutTransform)
+        double physW   = imgW * spacingX;
+        double physH   = imgH * spacingY;
+        // px/mm: Viewbox Stretch=Uniform picks the limiting axis
+        double pxPerMm = Math.Min(borderW / physW, borderH / physH);
+        double px10mm  = pxPerMm * 10.0;
 
         // Choose mm spacing: 10 mm default, 5 mm zoomed, 1 mm maximum zoom
         double mm = px10mm < 30.0 ? 10.0
@@ -191,8 +225,7 @@ public partial class TriplanarViewer : UserControl
         }
     }
 
-    private void UpdateWlDisplay()
-        => InfoWL.Text = $"W {_ww}  ·  L {_wl}";
+    private void UpdateWlDisplay() { /* W/L shown in status bar via WlChanged event */ }
 
     // ── W/L presets ───────────────────────────────────────────────────────
 
@@ -200,12 +233,14 @@ public partial class TriplanarViewer : UserControl
     {
         _ww = 400; _wl = 40;
         RefreshAll();
+        WlChanged?.Invoke(_ww, _wl);
     }
 
     private void BtnPresetBone_Click(object sender, RoutedEventArgs e)
     {
         _ww = 2000; _wl = 400;
         RefreshAll();
+        WlChanged?.Invoke(_ww, _wl);
     }
 
     // ── Right-drag W/L ────────────────────────────────────────────────────
@@ -236,6 +271,7 @@ public partial class TriplanarViewer : UserControl
         _ww = Math.Max(1, _wlDragStartWw + (int)(dx * 4));
         _wl = _wlDragStartWl - (int)(dy * 4);
         RefreshAll();
+        WlChanged?.Invoke(_ww, _wl);
     }
 
     // ── Axial mouse events ────────────────────────────────────────────────
@@ -336,6 +372,131 @@ public partial class TriplanarViewer : UserControl
         CursorHuChanged?.Invoke(_volume.GetVoxel(x, y, z));
     }
 
+    // ── 3D bone preview ───────────────────────────────────────────────────
+
+    /// <summary>Push a new bone mesh into the 3D preview panel (null clears it).</summary>
+    public void SetBoneMesh(MeshData? mesh)
+    {
+        _boneMesh = mesh;
+        UpdateBonePreview();
+    }
+
+    private void UpdateBonePreview()
+    {
+        // Clear previous content (keep lights)
+        Preview3D.Children.Clear();
+        Preview3D.Children.Add(new DefaultLights());
+
+        if (_boneMesh == null || _boneMesh.VertexCount == 0)
+        {
+            NoMeshText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        NoMeshText.Visibility = Visibility.Collapsed;
+
+        var geo = BuildBoneGeometry(_boneMesh);
+
+        // Ivory/white bone color
+        var mat = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(245, 245, 240)));
+        var model = new GeometryModel3D(geo, mat) { BackMaterial = mat };
+        Preview3D.Children.Add(new ModelVisual3D { Content = model });
+
+        // Compute centroid for orbiting
+        var b = geo.Bounds;
+        _orbitTarget = new Point3D(b.X + b.SizeX * 0.5, b.Y + b.SizeY * 0.5, b.Z + b.SizeZ * 0.5);
+
+        // Fit camera from a 3/4 front-right-above angle then zoom to fit
+        double d = b.SizeX > b.SizeZ ? b.SizeX : b.SizeZ;
+        double r  = d * 2.2;
+        Preview3D.Camera = new PerspectiveCamera
+        {
+            Position      = _orbitTarget + new Vector3D(r * 0.6, -r, r * 0.5),
+            LookDirection = new Vector3D(-0.6, 1, -0.5),
+            UpDirection   = new Vector3D(0, 0, 1),
+            FieldOfView   = 40
+        };
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+            () => Preview3D.ZoomExtents(0));
+    }
+
+    private static MeshGeometry3D BuildBoneGeometry(MeshData data)
+    {
+        var geo       = new MeshGeometry3D();
+        var positions = geo.Positions       = new Point3DCollection(data.VertexCount);
+        var normals   = geo.Normals          = new Vector3DCollection(data.VertexCount);
+        var indices   = geo.TriangleIndices  = new Int32Collection(data.Indices.Length);
+
+        float[] p = data.Positions;
+        float[] n = data.Normals;
+        int     count = data.VertexCount;
+        for (int i = 0; i < count; i++)
+        {
+            int o = i * 3;
+            positions.Add(new Point3D(p[o], p[o + 1], p[o + 2]));
+            normals.Add(new Vector3D(n[o], n[o + 1], n[o + 2]));
+        }
+        foreach (int idx in data.Indices)
+            indices.Add(idx);
+
+        return geo;
+    }
+
+    // ── 3D panel mouse handlers ───────────────────────────────────────────
+
+    private void Preview3D_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            ToggleExpand(Quadrant.Preview3D);
+            e.Handled = true; // stop HelixToolkit starting rotation on the second click
+        }
+    }
+
+    private void Preview3D_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _orbitActive = true;
+        _orbitLast   = e.GetPosition(Preview3D);
+        Preview3D.CaptureMouse();
+        e.Handled = true;   // suppress context menu and HelixToolkit zoom
+    }
+
+    private void Preview3D_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _orbitActive = false;
+        Preview3D.ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    private void Preview3D_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_orbitActive || Preview3D.Camera is not PerspectiveCamera cam) return;
+        var pos = e.GetPosition(Preview3D);
+        double dx = pos.X - _orbitLast.X;
+        double dy = pos.Y - _orbitLast.Y;
+        _orbitLast = pos;
+        OrbitCamera(cam, _orbitTarget, dx, dy);
+    }
+
+    private static void OrbitCamera(PerspectiveCamera cam, Point3D target, double dx, double dy)
+    {
+        const double sensitivity = 0.4 * Math.PI / 180.0;
+        var offset = cam.Position - target;
+        double r     = offset.Length;
+        double theta = Math.Atan2(offset.Y, offset.X) - dx * sensitivity;
+        double phi   = Math.Acos(Math.Clamp(offset.Z / r, -1.0, 1.0)) + dy * sensitivity;
+        phi = Math.Clamp(phi, 0.04, Math.PI - 0.04);   // prevent gimbal pole
+
+        var newOffset = new Vector3D(
+            r * Math.Sin(phi) * Math.Cos(theta),
+            r * Math.Sin(phi) * Math.Sin(theta),
+            r * Math.Cos(phi));
+
+        cam.Position      = target + newOffset;
+        cam.LookDirection = -newOffset;
+        cam.UpDirection   = new Vector3D(0, 0, 1);
+    }
+
     // ── Expand / collapse ─────────────────────────────────────────────────
 
     private void ToggleExpand(Quadrant q)
@@ -363,9 +524,10 @@ public partial class TriplanarViewer : UserControl
 
         var target = q switch
         {
-            Quadrant.Coronal  => CoronalBorder,
-            Quadrant.Sagittal => SagittalBorder,
-            _                 => AxialBorder,
+            Quadrant.Coronal   => CoronalBorder,
+            Quadrant.Sagittal  => SagittalBorder,
+            Quadrant.Preview3D => InfoBorder,
+            _                  => AxialBorder,
         };
 
         target.Visibility = Visibility.Visible;
@@ -373,19 +535,23 @@ public partial class TriplanarViewer : UserControl
         Grid.SetColumn(target, 0);
         Grid.SetRowSpan(target, 3);
         Grid.SetColumnSpan(target, 3);
+
+        // Show axes widget when 3D panel is expanded
+        Preview3D.ShowCoordinateSystem = (q == Quadrant.Preview3D);
+
         _expanded = q;
     }
 
     private void CollapseAll()
     {
-        // Restore original grid positions
         RestoreQuadrant(AxialBorder,    0, 0);
         RestoreQuadrant(CoronalBorder,  0, 2);
         RestoreQuadrant(SagittalBorder, 2, 0);
         RestoreQuadrant(InfoBorder,     2, 2);
 
-        HSeparator.Visibility = Visibility.Visible;
-        VSeparator.Visibility = Visibility.Visible;
+        HSeparator.Visibility         = Visibility.Visible;
+        VSeparator.Visibility         = Visibility.Visible;
+        Preview3D.ShowCoordinateSystem = false;
     }
 
     private static void RestoreQuadrant(Border b, int row, int col)

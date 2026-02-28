@@ -1,6 +1,7 @@
 <UserControl x:Class="CMFPlanner.UI.TriplanarViewer"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:helix="http://helix-toolkit.org/wpf"
              Background="#0D0D0D">
 
     <UserControl.Resources>
@@ -144,49 +145,55 @@
             </Grid>
         </Border>
 
-        <!-- ══ INFO PANEL  (bottom-right) ═══════════════════════════ -->
-        <Border x:Name="InfoBorder" Grid.Row="2" Grid.Column="2" Background="#111111">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Margin="12" MaxWidth="200">
-                <TextBlock x:Name="InfoPatient"
-                           Foreground="#999999" FontSize="11"
-                           TextAlignment="Center" TextWrapping="Wrap"/>
-                <TextBlock x:Name="InfoDimensions"
-                           Foreground="#666666" FontSize="10"
-                           Margin="0,8,0,0" TextAlignment="Center"/>
-                <TextBlock x:Name="InfoSpacing"
-                           Foreground="#666666" FontSize="10"
-                           TextAlignment="Center"/>
+        <!-- ══ 3D BONE PREVIEW  (bottom-right) ═══════════════════════════ -->
+        <Border x:Name="InfoBorder" Grid.Row="2" Grid.Column="2" ClipToBounds="True"
+                Background="#111111">
+            <Grid PreviewMouseLeftButtonDown="Preview3D_PreviewMouseLeftButtonDown">
 
-                <!-- W/L presets -->
-                <TextBlock Text="WINDOW / LEVEL"
-                           Foreground="#444444" FontSize="9"
-                           Margin="0,14,0,5" TextAlignment="Center"
-                           FontWeight="SemiBold"/>
-                <UniformGrid Columns="2" Margin="0,0,0,6">
+                <!-- HelixViewport3D — bone preview -->
+                <helix:HelixViewport3D x:Name="Preview3D"
+                                       Background="#111111"
+                                       ShowCoordinateSystem="False"
+                                       ShowFrameRate="False"
+                                       IsRotationEnabled="True"
+                                       IsMoveEnabled="True"
+                                       IsPanEnabled="True"
+                                       IsZoomEnabled="True"
+                                       RotateAroundMouseDownPoint="True"
+                                       PreviewMouseRightButtonDown="Preview3D_PreviewMouseRightButtonDown"
+                                       PreviewMouseRightButtonUp="Preview3D_PreviewMouseRightButtonUp"
+                                       MouseMove="Preview3D_MouseMove">
+                    <helix:HelixViewport3D.ContextMenu>
+                        <x:Null/>
+                    </helix:HelixViewport3D.ContextMenu>
+                </helix:HelixViewport3D>
+
+                <!-- No-mesh placeholder -->
+                <TextBlock x:Name="NoMeshText"
+                           Text="Apply segmentation&#10;to see 3D preview"
+                           Foreground="#444444" FontSize="11"
+                           TextAlignment="Center" LineHeight="20"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           IsHitTestVisible="False"/>
+
+                <!-- Panel label -->
+                <Border Background="#55000000" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Padding="5,2" Margin="4" IsHitTestVisible="False">
+                    <TextBlock Text="3D PREVIEW" Foreground="#FF8800" FontSize="10" FontWeight="SemiBold"/>
+                </Border>
+
+                <!-- W/L presets — compact overlay bottom of panel -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            Margin="0,0,0,6" IsHitTestVisible="True">
                     <Button Content="Soft Tissue" Style="{StaticResource PresetBtn}"
                             Click="BtnPresetSoftTissue_Click" ToolTip="W=400 L=40"/>
                     <Button Content="Bone" Style="{StaticResource PresetBtn}"
                             Click="BtnPresetBone_Click" ToolTip="W=2000 L=400"/>
-                </UniformGrid>
-                <TextBlock x:Name="InfoWL"
-                           Foreground="#888888" FontSize="10"
-                           TextAlignment="Center"/>
+                </StackPanel>
 
-                <!-- Usage hints -->
-                <TextBlock Text="Scroll: navigate slices"
-                           Foreground="#3D3D3D" FontSize="9"
-                           Margin="0,10,0,2" TextAlignment="Center"/>
-                <TextBlock Text="Click: move crosshair"
-                           Foreground="#3D3D3D" FontSize="9"
-                           TextAlignment="Center"/>
-                <TextBlock Text="Right-drag: adjust W/L"
-                           Foreground="#3D3D3D" FontSize="9"
-                           TextAlignment="Center"/>
-                <TextBlock Text="Double-click: expand view"
-                           Foreground="#3D3D3D" FontSize="9"
-                           TextAlignment="Center"/>
-            </StackPanel>
+            </Grid>
         </Border>
 
     </Grid>

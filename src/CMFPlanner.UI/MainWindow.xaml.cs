@@ -80,6 +80,9 @@ public partial class MainWindow : Window
         TriplanarView.CursorHuChanged += hu =>
             StatusMessages.Text = $"HU: {hu}";
 
+        TriplanarView.WlChanged += (ww, wl) =>
+            StatusMessages.Text = $"W: {ww}  L: {wl}";
+
         PopulateWorkflowSteps();
         RefreshStatusBar();
     }
@@ -465,6 +468,10 @@ public partial class MainWindow : Window
             Viewport3D.Children.Remove(_boneMeshVisual);
             _boneMeshVisual = null;
         }
+
+        // Always push to the triplanar 3D preview (null clears it)
+        TriplanarView.SetBoneMesh(data.VertexCount > 0 ? data : null);
+
         if (data.VertexCount == 0) return;
 
         var geometry = BuildGeometry(data);
