@@ -37,12 +37,37 @@ public partial class TriplanarViewer : UserControl
     private enum Quadrant { None, Axial, Coronal, Sagittal, Preview3D }
     private Quadrant _expanded = Quadrant.None;
 
+    // Rotation zone within the 3D preview
+    // Top 50 % is divided: left 25 % = Yaw (upper) / PitchLeft (lower),
+    //                       right 25 % = Roll (upper) / PitchRight (lower),
+    //                       center 50 % = Center (free).
+    // Bottom 50 % is always Free (existing unconstrained orbit).
+    private enum RotationZone { Yaw, Roll, PitchLeft, PitchRight, Center, Free }
+
     // 2D grid overlay
     private bool _gridVisible = true;
 
     // 3D bone preview
     private MeshData? _boneMesh;
     private Point3D   _orbitTarget = new(0, 0, 0);
+
+    // Zoom and Pan
+    private double _zoomFactor = 1.0;
+    private Point  _panAxial, _panCoronal, _panSagittal;
+    private bool   _isPanning;
+    private Point  _panDragOrigin;
+    private Point  _panDragStartOffset;
+    private Quadrant _panQuadrant;
+
+    // Zone rotation state
+    private RotationZone _dragZone          = RotationZone.Free;
+    private RotationZone _manipZone         = RotationZone.Free;
+    private bool         _manipZoneReady;        // set on ManipulationStarted
+    private bool         _zoneHintTriggered;     // true once hint has been shown this session
+    private System.Windows.Threading.DispatcherTimer? _zoneHintTimer;
+    private static readonly string _hintFlagPath = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CMFPlanner", "zone_hint_dismissed");
 
     // ── Public API ────────────────────────────────────────────────────────
 
@@ -66,6 +91,9 @@ public partial class TriplanarViewer : UserControl
         AxialBorder.SizeChanged    += OnViewportSizeChanged;
         CoronalBorder.SizeChanged  += OnViewportSizeChanged;
         SagittalBorder.SizeChanged += OnViewportSizeChanged;
+
+        // Redraw the 2D grid overlay on the 3D preview when it resizes
+        InfoBorder.SizeChanged += (_, _) => Draw3DGridOverlay();
 
         // Escape collapses any expanded quadrant
         Loaded += (_, _) =>
@@ -173,6 +201,26 @@ public partial class TriplanarViewer : UserControl
         AxialGrid.LayoutTransform    = new ScaleTransform(uni * _volume.SpacingX, uni * _volume.SpacingY);
         CoronalGrid.LayoutTransform  = new ScaleTransform(uni * _volume.SpacingX, uni * _volume.SpacingZ);
         SagittalGrid.LayoutTransform = new ScaleTransform(uni * _volume.SpacingY, uni * _volume.SpacingZ);
+
+        // Apply RenderTransform for dynamic Zoom and Pan
+        AxialGrid.RenderTransform = new TransformGroup {
+            Children = new TransformCollection {
+                new ScaleTransform(_zoomFactor, _zoomFactor, aw / 2, ah / 2),
+                new TranslateTransform(_panAxial.X, _panAxial.Y)
+            }
+        };
+        CoronalGrid.RenderTransform = new TransformGroup {
+            Children = new TransformCollection {
+                new ScaleTransform(_zoomFactor, _zoomFactor, cw / 2, ch / 2),
+                new TranslateTransform(_panCoronal.X, _panCoronal.Y)
+            }
+        };
+        SagittalGrid.RenderTransform = new TransformGroup {
+            Children = new TransformCollection {
+                new ScaleTransform(_zoomFactor, _zoomFactor, sw / 2, sh / 2),
+                new TranslateTransform(_panSagittal.X, _panSagittal.Y)
+            }
+        };
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
@@ -308,128 +356,164 @@ public partial class TriplanarViewer : UserControl
         PresetSelected?.Invoke("Bone");
     }
 
-    // ── Right-drag W/L ────────────────────────────────────────────────────
+    // ── Unified 2D Viewport Mouse Interactions ────────────────────────────
 
-    private void AnyGrid_RightButtonDown(object sender, MouseButtonEventArgs e)
+    private Quadrant GetQuadrant(object sender)
     {
+        if (sender == AxialGrid) return Quadrant.Axial;
+        if (sender == CoronalGrid) return Quadrant.Coronal;
+        if (sender == SagittalGrid) return Quadrant.Sagittal;
+        return Quadrant.None;
+    }
+
+    private void AnyGrid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var q = GetQuadrant(sender);
+        if (e.ClickCount == 2) { ToggleExpand(q); return; }
+        
         _wlDragging    = true;
-        _wlDragOrigin  = Mouse.GetPosition(this);
+        _wlDragOrigin  = e.GetPosition(this);
         _wlDragStartWw = _ww;
         _wlDragStartWl = _wl;
         ((UIElement)sender).CaptureMouse();
         e.Handled = true;
     }
 
-    private void AnyGrid_RightButtonUp(object sender, MouseButtonEventArgs e)
+    private void AnyGrid_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        ((UIElement)sender).CaptureMouse();
+        UpdateCrosshairFromMouse(sender, e);
+        e.Handled = true;
+    }
+
+    private void AnyGrid_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.MiddleButton == MouseButtonState.Pressed || e.ChangedButton == MouseButton.Middle)
+        {
+            _isPanning = true;
+            _panQuadrant = GetQuadrant(sender);
+            _panDragOrigin = e.GetPosition(this);
+            
+            if (_panQuadrant == Quadrant.Axial) _panDragStartOffset = _panAxial;
+            else if (_panQuadrant == Quadrant.Coronal) _panDragStartOffset = _panCoronal;
+            else if (_panQuadrant == Quadrant.Sagittal) _panDragStartOffset = _panSagittal;
+            
+            ((UIElement)sender).CaptureMouse();
+            e.Handled = true;
+        }
+    }
+
+    private void AnyGrid_MouseUp(object sender, MouseButtonEventArgs e)
     {
         _wlDragging = false;
+        _isPanning = false;
         ((UIElement)sender).ReleaseMouseCapture();
         e.Handled = true;
     }
 
-    private void ApplyWlDrag()
-    {
-        if (!_wlDragging || _volume == null) return;
-        var pos = Mouse.GetPosition(this);
-        double dx =  pos.X - _wlDragOrigin.X;
-        double dy =  pos.Y - _wlDragOrigin.Y;
-        _ww = Math.Max(1, _wlDragStartWw + (int)(dx * 4));
-        _wl = _wlDragStartWl - (int)(dy * 4);
-        RefreshAll();
-        WlChanged?.Invoke(_ww, _wl);
-    }
-
-    // ── Axial mouse events ────────────────────────────────────────────────
-
-    private void AxialGrid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2) { ToggleExpand(Quadrant.Axial); return; }
-        if (_volume == null) return;
-        var p = e.GetPosition((UIElement)sender);
-        _cx = Clamp((int)p.X, _volume.Columns);
-        _cy = Clamp((int)p.Y, _volume.Rows);
-        RefreshAll();
-    }
-
-    private void AxialGrid_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (_wlDragging) { ApplyWlDrag(); return; }
-        if (e.LeftButton != MouseButtonState.Pressed || _volume == null) return;
-        var p = e.GetPosition((UIElement)sender);
-        _cx = Clamp((int)p.X, _volume.Columns);
-        _cy = Clamp((int)p.Y, _volume.Rows);
-        RefreshAll();
-        FireHu(Clamp((int)p.X, _volume.Columns), Clamp((int)p.Y, _volume.Rows), _cz);
-    }
-
-    private void AxialGrid_MouseWheel(object sender, MouseWheelEventArgs e)
+    private void AnyGrid_MouseMove(object sender, MouseEventArgs e)
     {
         if (_volume == null) return;
-        _cz = Math.Clamp(_cz + (e.Delta > 0 ? 1 : -1), 0, _volume.SliceCount - 1);
-        RefreshAll();
+        
+        if (_wlDragging)
+        {
+            var pos = e.GetPosition(this);
+            double dx = pos.X - _wlDragOrigin.X;
+            double dy = pos.Y - _wlDragOrigin.Y;
+            _ww = Math.Max(1, _wlDragStartWw + (int)(dx * 4));
+            _wl = _wlDragStartWl - (int)(dy * 4);
+            RefreshAll();
+            WlChanged?.Invoke(_ww, _wl);
+        }
+        else if (e.RightButton == MouseButtonState.Pressed)
+        {
+            UpdateCrosshairFromMouse(sender, e);
+        }
+        else if (_isPanning)
+        {
+            var pos = e.GetPosition(this);
+            double dx = pos.X - _panDragOrigin.X;
+            double dy = pos.Y - _panDragOrigin.Y;
+            
+            if (_panQuadrant == Quadrant.Axial)
+                _panAxial = new Point(_panDragStartOffset.X + dx, _panDragStartOffset.Y + dy);
+            else if (_panQuadrant == Quadrant.Coronal)
+                _panCoronal = new Point(_panDragStartOffset.X + dx, _panDragStartOffset.Y + dy);
+            else if (_panQuadrant == Quadrant.Sagittal)
+                _panSagittal = new Point(_panDragStartOffset.X + dx, _panDragStartOffset.Y + dy);
+                
+            SyncZoom();
+        }
+        else
+        {
+            // Hover logic: update HU display 
+            var q = GetQuadrant(sender);
+            var p = e.GetPosition((UIElement)sender);
+            int hx = _cx, hy = _cy, hz = _cz;
+            if (q == Quadrant.Axial) { hx = Clamp((int)p.X, _volume.Columns); hy = Clamp((int)p.Y, _volume.Rows); }
+            if (q == Quadrant.Coronal) { hx = Clamp((int)p.X, _volume.Columns); hz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount); }
+            if (q == Quadrant.Sagittal) { hy = Clamp((int)p.X, _volume.Rows); hz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount); }
+            FireHu(hx, hy, hz);
+        }
     }
 
-    // ── Coronal mouse events ──────────────────────────────────────────────
-
-    private void CoronalGrid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void UpdateCrosshairFromMouse(object sender, MouseEventArgs e)
     {
-        if (e.ClickCount == 2) { ToggleExpand(Quadrant.Coronal); return; }
         if (_volume == null) return;
         var p = e.GetPosition((UIElement)sender);
-        _cx = Clamp((int)p.X, _volume.Columns);
-        _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
+        var q = GetQuadrant(sender);
+        
+        if (q == Quadrant.Axial)
+        {
+            _cx = Clamp((int)p.X, _volume.Columns);
+            _cy = Clamp((int)p.Y, _volume.Rows);
+        }
+        else if (q == Quadrant.Coronal)
+        {
+            _cx = Clamp((int)p.X, _volume.Columns);
+            _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
+        }
+        else if (q == Quadrant.Sagittal)
+        {
+            _cy = Clamp((int)p.X, _volume.Rows);
+            _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
+        }
+        
         RefreshAll();
-    }
-
-    private void CoronalGrid_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (_wlDragging) { ApplyWlDrag(); return; }
-        if (e.LeftButton != MouseButtonState.Pressed || _volume == null) return;
-        var p = e.GetPosition((UIElement)sender);
-        _cx = Clamp((int)p.X, _volume.Columns);
-        _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
-        RefreshAll();
+        // Also fire HU on drag
         FireHu(_cx, _cy, _cz);
     }
 
-    private void CoronalGrid_MouseWheel(object sender, MouseWheelEventArgs e)
+    private void AnyGrid_MouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (_volume == null) return;
-        _cy = Math.Clamp(_cy + (e.Delta > 0 ? 1 : -1), 0, _volume.Rows - 1);
-        RefreshAll();
-    }
-
-    // ── Sagittal mouse events ─────────────────────────────────────────────
-
-    private void SagittalGrid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2) { ToggleExpand(Quadrant.Sagittal); return; }
-        if (_volume == null) return;
-        var p = e.GetPosition((UIElement)sender);
-        _cy = Clamp((int)p.X, _volume.Rows);
-        _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
-        RefreshAll();
-    }
-
-    private void SagittalGrid_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (_wlDragging) { ApplyWlDrag(); return; }
-        if (e.LeftButton != MouseButtonState.Pressed || _volume == null) return;
-        var p = e.GetPosition((UIElement)sender);
-        _cy = Clamp((int)p.X, _volume.Rows);
-        _cz = _volume.SliceCount - 1 - Clamp((int)p.Y, _volume.SliceCount);
-        RefreshAll();
-        FireHu(_cx, _cy, _cz);
-    }
-
-    private void SagittalGrid_MouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        if (_volume == null) return;
-        _cx = Math.Clamp(_cx + (e.Delta > 0 ? 1 : -1), 0, _volume.Columns - 1);
-        RefreshAll();
+        
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            // Zoom (Ctrl + Wheel)
+            double zoomChange = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
+            _zoomFactor = Math.Max(0.1, Math.Min(20.0, _zoomFactor * zoomChange));
+            SyncZoom();
+        }
+        else
+        {
+            // Scroll slices
+            var q = GetQuadrant(sender);
+            int delta = e.Delta > 0 ? 1 : -1;
+            
+            if (q == Quadrant.Axial)
+                _cz = Math.Clamp(_cz + delta, 0, _volume.SliceCount - 1);
+            else if (q == Quadrant.Coronal)
+                _cy = Math.Clamp(_cy + delta, 0, _volume.Rows - 1);
+            else if (q == Quadrant.Sagittal)
+                _cx = Math.Clamp(_cx + delta, 0, _volume.Columns - 1);
+                
+            RefreshAll();
+        }
     }
 
     // ── HU cursor helper ──────────────────────────────────────────────────
+
 
     private void FireHu(int x, int y, int z)
     {
@@ -508,17 +592,359 @@ public partial class TriplanarViewer : UserControl
         return geo;
     }
 
-    // ── 3D panel mouse + live slider handlers ────────────────────────────
+    // ── 3D panel custom mouse handlers ───────────────────────────────────
+    // We handle rotation/zoom/pan ourselves so it works on all touchpads.
 
-    // Double-click expands/collapses the 3D preview.
-    private void Preview3D_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private bool  _3dDragging;
+    private Point _3dDragOrigin;
+
+    private void Preview3DContainer_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Any click while the zone hint is visible → permanently dismiss it
+        if (ZoneHintOverlay.Visibility == Visibility.Visible)
+        {
+            DismissZoneHint(permanent: true);
+            e.Handled = true;
+            return;
+        }
+
+        // Double-click → expand/collapse
         if (e.ClickCount == 2)
         {
             ToggleExpand(Quadrant.Preview3D);
             e.Handled = true;
+            return;
         }
-        // Single clicks pass through to HelixToolkit (trackball rotation)
+
+        // Single click → lock rotation zone and start drag
+        var pos       = e.GetPosition(Preview3DContainer);
+        _dragZone     = GetZone(pos);
+        _3dDragging   = true;
+        _3dDragOrigin = pos;
+        Preview3DContainer.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void Preview3DContainer_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_3dDragging)
+        {
+            _3dDragging = false;
+            Preview3DContainer.ReleaseMouseCapture();
+            e.Handled = true;
+        }
+    }
+
+    private void Preview3DContainer_MouseMove(object sender, MouseEventArgs e)
+    {
+        var pos = e.GetPosition(Preview3DContainer);
+
+        if (!_3dDragging)
+        {
+            // Hover — update cursor icon, floating label, and maybe show zone hint
+            var hz = GetZone(pos);
+            UpdateZoneCursor(hz);
+            UpdateZoneLabel(hz, pos);
+            MaybeShowZoneHint(pos);
+            return;
+        }
+
+        if (Preview3D.Camera is not PerspectiveCamera cam) return;
+
+        double dx = pos.X - _3dDragOrigin.X;
+        double dy = pos.Y - _3dDragOrigin.Y;
+        _3dDragOrigin = pos;
+
+        if (Math.Abs(dx) < 0.1 && Math.Abs(dy) < 0.1) return;
+
+        ApplyZoneRotation(cam, _dragZone, dx, dy);
+    }
+
+    private void Preview3DContainer_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Preview3D.Camera is not PerspectiveCamera cam) return;
+
+        // Scroll wheel (and 2-finger touchpad scroll) → zoom in / out.
+        // Use pow() so small precision-touchpad deltas feel proportional to large mouse notches.
+        // Standard notch: Delta = ±120 → factor ≈ 0.887 / 1.127  (~11 % step)
+        double factor    = Math.Pow(0.999, e.Delta);   // < 1 = closer, > 1 = farther
+        var    toTarget  = _orbitTarget - cam.Position;
+        double dist      = Math.Max(1.0, toTarget.Length * factor);
+        var    look      = cam.LookDirection; look.Normalize();
+        cam.Position     = _orbitTarget - look * dist;
+
+        e.Handled = true;
+    }
+
+    private void Preview3DContainer_MouseLeave(object sender, MouseEventArgs e)
+    {
+        ZoneLabelBorder.Visibility = Visibility.Collapsed;
+        Preview3DContainer.Cursor  = null;   // revert to inherited default
+    }
+
+    // ── 3D panel touch / precision-touchpad manipulation ─────────────────
+    // Fires on actual touch input (Windows Precision Touchpad with WM_POINTER
+    // or a touchscreen).  Plain 2-finger scroll arrives via MouseWheel above.
+
+    private void Preview3DContainer_ManipulationStarting(object sender, ManipulationStartingEventArgs e)
+    {
+        e.ManipulationContainer = Preview3DContainer;
+        e.Mode = ManipulationModes.TranslateX | ManipulationModes.TranslateY
+               | ManipulationModes.Scale;
+        _manipZoneReady = false; // will be set in ManipulationStarted
+        e.Handled = true;
+    }
+
+    private void Preview3DContainer_ManipulationStarted(object sender, ManipulationStartedEventArgs e)
+    {
+        // ManipulationOrigin is the centroid of all touch contacts in Preview3DContainer space
+        _manipZone      = GetZone(e.ManipulationOrigin);
+        _manipZoneReady = true;
+        e.Handled = true;
+    }
+
+    private void Preview3DContainer_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
+    {
+        if (Preview3D.Camera is not PerspectiveCamera cam) { e.Handled = true; return; }
+
+        // Fallback: if ManipulationStarted never fired, derive zone from origin
+        if (!_manipZoneReady)
+        {
+            _manipZone      = GetZone(e.ManipulationOrigin);
+            _manipZoneReady = true;
+        }
+
+        // 2-finger translation → zone-aware rotation
+        double dx = e.DeltaManipulation.Translation.X;
+        double dy = e.DeltaManipulation.Translation.Y;
+        if (Math.Abs(dx) > 0.3 || Math.Abs(dy) > 0.3)
+            ApplyZoneRotation(cam, _manipZone, dx, dy);
+
+        // 2-finger pinch / spread → zoom (zone-independent)
+        double scale = e.DeltaManipulation.Scale.X;
+        if (Math.Abs(scale - 1.0) > 0.001)
+        {
+            var toTarget = _orbitTarget - cam.Position;
+            double dist  = Math.Max(1.0, toTarget.Length / scale);
+            var look     = cam.LookDirection; look.Normalize();
+            cam.Position = _orbitTarget - look * dist;
+        }
+
+        e.Handled = true;
+    }
+
+    private void Preview3DContainer_ManipulationInertiaStarting(object sender, ManipulationInertiaStartingEventArgs e)
+    {
+        // Brief glide then stop; keeps the model from drifting indefinitely
+        e.TranslationBehavior.DesiredDeceleration = 96.0 * 4 / (1000.0 * 1000.0);
+        e.Handled = true;
+    }
+
+    // ── Zone-control system ───────────────────────────────────────────────
+    // Zone map (relative to Preview3DContainer size):
+    //   Y < 50 % and X <  25 % → top = Yaw,   bottom = PitchLeft
+    //   Y < 50 % and X >  75 % → top = Roll,  bottom = PitchRight
+    //   Y < 50 % and X 25–75 % → Center (unconstrained)
+    //   Y ≥ 50 %                → Free  (unchanged existing orbit)
+
+    private RotationZone GetZone(Point p)
+    {
+        double w = Preview3DContainer.ActualWidth;
+        double h = Preview3DContainer.ActualHeight;
+        if (w <= 0 || h <= 0) return RotationZone.Free;
+
+        double rx = p.X / w;
+        double ry = p.Y / h;
+
+        if (ry >= 0.5) return RotationZone.Free;          // bottom half — free orbit
+
+        if (rx < 0.375)      // left column now 37.5 % (was 25 %, +50 %)
+            return ry < 0.25 ? RotationZone.Yaw : RotationZone.PitchLeft;
+        if (rx > 0.75)       // right column unchanged at 25 %
+            return ry < 0.25 ? RotationZone.Roll : RotationZone.PitchRight;
+        return RotationZone.Center;
+    }
+
+    /// <summary>
+    /// Applies a rotation to the camera that matches the zone's constrained axis.
+    /// Named zones (Yaw/Roll/Pitch) use only the vertical drag component (dy) at 0.3 °/px.
+    /// Center and Free use the original unconstrained orbit at 0.4 °/px.
+    /// </summary>
+    private void ApplyZoneRotation(PerspectiveCamera cam, RotationZone zone, double dx, double dy)
+    {
+        const double yawSens  = 1.0;   // deg/px — yaw needs stronger response on constrained axis
+        const double zoneSens = 0.3;   // deg/px — ROLL / PITCH named zones
+        const double freeSens = 0.4;   // deg/px — CENTER / FREE unconstrained orbit
+
+        var look  = cam.LookDirection; look.Normalize();
+        var up    = cam.UpDirection;   up.Normalize();
+        var right = Vector3D.CrossProduct(look, up); right.Normalize();
+
+        switch (zone)
+        {
+            case RotationZone.Yaw:
+                // Vertical drag → yaw around world Z axis (the "up" axis in this viewer)
+                // Z = superior-inferior in DICOM; rotating around it turns the nose left/right.
+                RotateCameraOnAxis(cam, new Vector3D(0, 0, 1), dy * yawSens);
+                break;
+
+            case RotationZone.Roll:
+                // Vertical drag → roll around camera look direction (head tilt)
+                RotateCameraOnAxis(cam, look, dy * zoneSens);
+                break;
+
+            case RotationZone.PitchLeft:
+            case RotationZone.PitchRight:
+                // Vertical drag → pitch around camera right vector (head nod)
+                RotateCameraOnAxis(cam, right, dy * zoneSens);
+                break;
+
+            default:   // Center + Free — original unconstrained orbit (dx + dy)
+                var qYaw   = new System.Windows.Media.Media3D.Quaternion(up,    -dx * freeSens);
+                var qPitch = new System.Windows.Media.Media3D.Quaternion(right,  -dy * freeSens);
+                var rot    = new QuaternionRotation3D(qYaw * qPitch);
+                var rotTx  = new RotateTransform3D(rot, _orbitTarget);
+                cam.Position      = rotTx.Transform(cam.Position);
+                cam.LookDirection = rotTx.Transform(cam.LookDirection);
+                cam.UpDirection   = rotTx.Transform(cam.UpDirection);
+                break;
+        }
+    }
+
+    private void RotateCameraOnAxis(PerspectiveCamera cam, Vector3D axis, double angleDeg)
+    {
+        if (axis.Length < 1e-6) return;
+        axis.Normalize();
+        var q     = new System.Windows.Media.Media3D.Quaternion(axis, angleDeg);
+        var rot   = new QuaternionRotation3D(q);
+        var rotTx = new RotateTransform3D(rot, _orbitTarget);
+        cam.Position      = rotTx.Transform(cam.Position);
+        cam.LookDirection = rotTx.Transform(cam.LookDirection);
+        cam.UpDirection   = rotTx.Transform(cam.UpDirection);
+    }
+
+    private void UpdateZoneCursor(RotationZone zone)
+    {
+        Preview3DContainer.Cursor = zone switch
+        {
+            RotationZone.Yaw        => Cursors.SizeWE,
+            RotationZone.Roll       => Cursors.SizeNESW,
+            RotationZone.PitchLeft  => Cursors.SizeNS,
+            RotationZone.PitchRight => Cursors.SizeNS,
+            _                       => Cursors.SizeAll,
+        };
+    }
+
+    private void UpdateZoneLabel(RotationZone zone, Point pos)
+    {
+        string? label = zone switch
+        {
+            RotationZone.Yaw        => "⟳ YAW",
+            RotationZone.Roll       => "⟳ ROLL",
+            RotationZone.PitchLeft  => "↕ PITCH",
+            RotationZone.PitchRight => "↕ PITCH",
+            _                       => null,
+        };
+
+        if (label is null) { ZoneLabelBorder.Visibility = Visibility.Collapsed; return; }
+
+        ZoneLabelText.Text         = label;
+        ZoneLabelBorder.Visibility = Visibility.Visible;
+        Canvas.SetLeft(ZoneLabelBorder, pos.X + 16);
+        Canvas.SetTop(ZoneLabelBorder,  pos.Y - 8);
+    }
+
+    // ── Zone hint overlay ─────────────────────────────────────────────────
+
+    private static bool ZoneHintDismissed =>
+        System.IO.File.Exists(_hintFlagPath);
+
+    /// <summary>
+    /// Shows the zone-control overlay the first time the cursor enters the top 50 %
+    /// of the 3D panel (skipped if already permanently dismissed).
+    /// </summary>
+    private void MaybeShowZoneHint(Point pos)
+    {
+        if (_zoneHintTriggered || ZoneHintDismissed) return;
+
+        double ry = pos.Y / Math.Max(1.0, Preview3DContainer.ActualHeight);
+        if (ry >= 0.5) return;  // only trigger from the zoned top half
+
+        _zoneHintTriggered = true;
+        ZoneHintOverlay.Visibility = Visibility.Visible;
+
+        _zoneHintTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(3)
+        };
+        _zoneHintTimer.Tick += (_, _) => DismissZoneHint(permanent: false);
+        _zoneHintTimer.Start();
+    }
+
+    /// <summary>
+    /// Hides the zone-control overlay. When <paramref name="permanent"/> is true,
+    /// writes a marker file so the hint is never shown again across sessions.
+    /// </summary>
+    private void DismissZoneHint(bool permanent)
+    {
+        _zoneHintTimer?.Stop();
+        _zoneHintTimer = null;
+        ZoneHintOverlay.Visibility = Visibility.Collapsed;
+
+        if (permanent)
+        {
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(_hintFlagPath)!;
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllText(_hintFlagPath, "dismissed");
+            }
+            catch { /* non-critical — hint will show again next session if write fails */ }
+        }
+    }
+
+    // ── 2D metric grid overlay on the 3D preview ─────────────────────────
+
+    private void Draw3DGridOverlay()
+    {
+        Preview3DGridCanvas.Children.Clear();
+
+        double w = Preview3DGridCanvas.ActualWidth;
+        double h = Preview3DGridCanvas.ActualHeight;
+        if (w <= 0 || h <= 0) return;
+
+        // Fixed 40-pixel spacing for minor lines, with majors every 5th line
+        double spacing = 40.0;
+        int majorEvery = 5;
+
+        var minor = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255));
+        var major = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255));
+
+        // Vertical lines
+        for (double x = 0, i = 0; x <= w; x += spacing, i++)
+        {
+            bool isMajor = (int)i % majorEvery == 0;
+            Preview3DGridCanvas.Children.Add(new Line
+            {
+                X1 = x, X2 = x, Y1 = 0, Y2 = h,
+                Stroke          = isMajor ? major : minor,
+                StrokeThickness = isMajor ? 0.8 : 0.4,
+                IsHitTestVisible = false
+            });
+        }
+
+        // Horizontal lines
+        for (double y = 0, i = 0; y <= h; y += spacing, i++)
+        {
+            bool isMajor = (int)i % majorEvery == 0;
+            Preview3DGridCanvas.Children.Add(new Line
+            {
+                X1 = 0, X2 = w, Y1 = y, Y2 = y,
+                Stroke          = isMajor ? major : minor,
+                StrokeThickness = isMajor ? 0.8 : 0.4,
+                IsHitTestVisible = false
+            });
+        }
     }
 
     // Live bone threshold slider ─────────────────────────────────────────

@@ -67,11 +67,14 @@
                 <Grid x:Name="AxialGrid" Width="1" Height="1" Background="Black"
                       HorizontalAlignment="Center" VerticalAlignment="Center"
                       Cursor="Cross"
-                      MouseLeftButtonDown="AxialGrid_MouseLeftButtonDown"
-                      MouseMove="AxialGrid_MouseMove"
-                      MouseRightButtonDown="AnyGrid_RightButtonDown"
-                      MouseRightButtonUp="AnyGrid_RightButtonUp"
-                      MouseWheel="AxialGrid_MouseWheel">
+                      MouseLeftButtonDown="AnyGrid_MouseLeftButtonDown"
+                      MouseRightButtonDown="AnyGrid_MouseRightButtonDown"
+                      MouseDown="AnyGrid_MouseDown"
+                      MouseLeftButtonUp="AnyGrid_MouseUp"
+                      MouseRightButtonUp="AnyGrid_MouseUp"
+                      MouseUp="AnyGrid_MouseUp"
+                      MouseMove="AnyGrid_MouseMove"
+                      MouseWheel="AnyGrid_MouseWheel">
                     <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
                     <Image x:Name="AxialImage" Stretch="Fill"
                            RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -94,11 +97,14 @@
                 <Grid x:Name="CoronalGrid" Width="1" Height="1" Background="Black"
                       HorizontalAlignment="Center" VerticalAlignment="Center"
                       Cursor="Cross"
-                      MouseLeftButtonDown="CoronalGrid_MouseLeftButtonDown"
-                      MouseMove="CoronalGrid_MouseMove"
-                      MouseRightButtonDown="AnyGrid_RightButtonDown"
-                      MouseRightButtonUp="AnyGrid_RightButtonUp"
-                      MouseWheel="CoronalGrid_MouseWheel">
+                      MouseLeftButtonDown="AnyGrid_MouseLeftButtonDown"
+                      MouseRightButtonDown="AnyGrid_MouseRightButtonDown"
+                      MouseDown="AnyGrid_MouseDown"
+                      MouseLeftButtonUp="AnyGrid_MouseUp"
+                      MouseRightButtonUp="AnyGrid_MouseUp"
+                      MouseUp="AnyGrid_MouseUp"
+                      MouseMove="AnyGrid_MouseMove"
+                      MouseWheel="AnyGrid_MouseWheel">
                     <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
                     <Image x:Name="CoronalImage" Stretch="Fill"
                            RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -121,11 +127,14 @@
                 <Grid x:Name="SagittalGrid" Width="1" Height="1" Background="Black"
                       HorizontalAlignment="Center" VerticalAlignment="Center"
                       Cursor="Cross"
-                      MouseLeftButtonDown="SagittalGrid_MouseLeftButtonDown"
-                      MouseMove="SagittalGrid_MouseMove"
-                      MouseRightButtonDown="AnyGrid_RightButtonDown"
-                      MouseRightButtonUp="AnyGrid_RightButtonUp"
-                      MouseWheel="SagittalGrid_MouseWheel">
+                      MouseLeftButtonDown="AnyGrid_MouseLeftButtonDown"
+                      MouseRightButtonDown="AnyGrid_MouseRightButtonDown"
+                      MouseDown="AnyGrid_MouseDown"
+                      MouseLeftButtonUp="AnyGrid_MouseUp"
+                      MouseRightButtonUp="AnyGrid_MouseUp"
+                      MouseUp="AnyGrid_MouseUp"
+                      MouseMove="AnyGrid_MouseMove"
+                      MouseWheel="AnyGrid_MouseWheel">
                     <Grid.ContextMenu><x:Null/></Grid.ContextMenu>
                     <Image x:Name="SagittalImage" Stretch="Fill"
                            RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -145,22 +154,36 @@
         <!-- ══ 3D BONE PREVIEW  (bottom-right) ═══════════════════════════ -->
         <Border x:Name="InfoBorder" Grid.Row="2" Grid.Column="2" ClipToBounds="True"
                 Background="#111111">
-            <Grid PreviewMouseLeftButtonDown="Preview3D_PreviewMouseLeftButtonDown">
+            <Grid x:Name="Preview3DContainer"
+                  Background="Transparent"
+                  IsManipulationEnabled="True"
+                  ManipulationStarting="Preview3DContainer_ManipulationStarting"
+                  ManipulationStarted="Preview3DContainer_ManipulationStarted"
+                  ManipulationDelta="Preview3DContainer_ManipulationDelta"
+                  ManipulationInertiaStarting="Preview3DContainer_ManipulationInertiaStarting"
+                  MouseLeftButtonDown="Preview3DContainer_MouseLeftButtonDown"
+                  MouseLeftButtonUp="Preview3DContainer_MouseLeftButtonUp"
+                  MouseMove="Preview3DContainer_MouseMove"
+                  MouseLeave="Preview3DContainer_MouseLeave"
+                  MouseWheel="Preview3DContainer_MouseWheel">
 
-                <!-- HelixViewport3D: all interactions owned by HelixToolkit (touchpad + mouse) -->
+                <!-- HelixViewport3D: camera controlled by our own mouse handlers -->
                 <helix:HelixViewport3D x:Name="Preview3D"
                                        Background="#111111"
                                        ShowCoordinateSystem="False"
                                        ShowFrameRate="False"
-                                       IsRotationEnabled="True"
+                                       IsRotationEnabled="False"
                                        IsMoveEnabled="False"
-                                       IsPanEnabled="True"
-                                       IsZoomEnabled="True"
-                                       RotateAroundMouseDownPoint="True">
+                                       IsPanEnabled="False"
+                                       IsZoomEnabled="False"
+                                       IsHitTestVisible="False">
                     <helix:HelixViewport3D.ContextMenu>
                         <x:Null/>
                     </helix:HelixViewport3D.ContextMenu>
                 </helix:HelixViewport3D>
+
+                <!-- 2D metric grid overlay (drawn in code-behind, like CT slices) -->
+                <Canvas x:Name="Preview3DGridCanvas" IsHitTestVisible="False"/>
 
                 <!-- No-mesh placeholder -->
                 <TextBlock x:Name="NoMeshText"
@@ -205,6 +228,63 @@
                                    VerticalAlignment="Center" Margin="8,0,0,0" Width="55"/>
                     </Grid>
                 </Border>
+
+                <!-- ── Zone-control hint overlay ────────────────────────────────
+                     Shown once on first hover in the top-50 %, fades after 3 s.
+                     Click anywhere to permanently dismiss.                    -->
+                <Grid x:Name="ZoneHintOverlay" Visibility="Collapsed" IsHitTestVisible="True">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>   <!-- top    25 % of viewport = YAW / ROLL row   -->
+                        <RowDefinition Height="*"/>   <!-- middle 25 % of viewport = PITCH corners     -->
+                        <RowDefinition Height="2*"/>  <!-- bottom 50 % of viewport = free rotate       -->
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>  <!-- left   37.5 % (YAW/PITCH-L, +50 %) -->
+                        <ColumnDefinition Width="3*"/>  <!-- center 37.5 %                       -->
+                        <ColumnDefinition Width="2*"/>  <!-- right  25   % (ROLL/PITCH-R)        -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- YAW — top-left -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="#550088FF" BorderBrush="#990088FF" BorderThickness="1">
+                        <TextBlock Text="↺ YAW" Foreground="#AADDFF" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- CENTER FREE — rows 0-1, center column -->
+                    <Border Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" Background="#22FFFFFF">
+                        <TextBlock Text="FREE ROTATE" Foreground="#55FFFFFF" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- ROLL — top-right -->
+                    <Border Grid.Row="0" Grid.Column="2" Background="#55FF8800" BorderBrush="#99FF8800" BorderThickness="1">
+                        <TextBlock Text="↻ ROLL" Foreground="#FFDDAA" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- PITCH — mid-left -->
+                    <Border Grid.Row="1" Grid.Column="0" Background="#5500DD88" BorderBrush="#9900DD88" BorderThickness="1">
+                        <TextBlock Text="↕ PITCH" Foreground="#AAFFCC" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- PITCH — mid-right -->
+                    <Border Grid.Row="1" Grid.Column="2" Background="#5500DD88" BorderBrush="#9900DD88" BorderThickness="1">
+                        <TextBlock Text="↕ PITCH" Foreground="#AAFFCC" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- FREE bottom half -->
+                    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Background="#18FFFFFF">
+                        <TextBlock Text="FREE ROTATE" Foreground="#33FFFFFF" FontSize="10" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </Grid>
+
+                <!-- Floating zone label — follows cursor, shown only inside named zones -->
+                <Canvas x:Name="ZoneLabelCanvas" IsHitTestVisible="False">
+                    <Border x:Name="ZoneLabelBorder"
+                            Background="#CC1A1A2E" CornerRadius="4" Padding="7,3"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="ZoneLabelText"
+                                   Foreground="#FFEEAA" FontSize="11" FontWeight="Bold"/>
+                    </Border>
+                </Canvas>
 
             </Grid>
         </Border>
