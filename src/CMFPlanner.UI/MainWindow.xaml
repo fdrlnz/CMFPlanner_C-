@@ -380,6 +380,52 @@
                                 </Button>
                             </StackPanel>
 
+                            <!-- Dental Casts Controls — shown when Dental Casts step is active -->
+                            <StackPanel x:Name="DentalCastsPanel" Visibility="Collapsed">
+
+                                <TextBlock Text="DENTAL ARCHES (STL)"
+                                           Foreground="#858585"
+                                           FontSize="10" FontWeight="SemiBold"
+                                           Margin="0,8,0,10"/>
+
+                                <!-- Upper Arch -->
+                                <TextBlock Text="Upper Arch"
+                                           Foreground="#CCCCCC" Margin="0,0,0,4"/>
+                                <Button x:Name="BtnImportUpperArch"
+                                        Style="{StaticResource ToolbarActionButton}"
+                                        Background="#3D3000"
+                                        Foreground="#FFDC64"
+                                        Padding="10,7"
+                                        HorizontalAlignment="Stretch"
+                                        Click="BtnImportUpperArch_Click"
+                                        ToolTip="Import upper dental arch STL file">
+                                    Import Upper Arch
+                                </Button>
+                                <TextBlock x:Name="UpperArchStatus"
+                                           Foreground="#858585" FontSize="10"
+                                           TextWrapping="Wrap"
+                                           Margin="0,3,0,12"/>
+
+                                <!-- Lower Arch -->
+                                <TextBlock Text="Lower Arch"
+                                           Foreground="#CCCCCC" Margin="0,0,0,4"/>
+                                <Button x:Name="BtnImportLowerArch"
+                                        Style="{StaticResource ToolbarActionButton}"
+                                        Background="#3D1A00"
+                                        Foreground="#FFA500"
+                                        Padding="10,7"
+                                        HorizontalAlignment="Stretch"
+                                        Click="BtnImportLowerArch_Click"
+                                        ToolTip="Import lower dental arch STL file">
+                                    Import Lower Arch
+                                </Button>
+                                <TextBlock x:Name="LowerArchStatus"
+                                           Foreground="#858585" FontSize="10"
+                                           TextWrapping="Wrap"
+                                           Margin="0,3,0,12"/>
+
+                            </StackPanel>
+
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

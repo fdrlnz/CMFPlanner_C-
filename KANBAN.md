@@ -207,7 +207,7 @@
   - Each 2D view renders a single interpolated slice using `WriteableBitmap` or a lightweight WPF `Image` backed by a raster render of the HU buffer
   - **Scroll to navigate:** mouse wheel in any view scrolls through slices in that axis
   - **Crosshair synchronization:** scrolling or clicking in any view updates the crosshair position in all three views in real time
-  - **Double-click to expand:** double-clicking any 2D view expands it to fill the full viewport area; double-clicking again returns to triplanar grid layout
+  - **Double-click to expand:** double-clicking any 2D view or the 3D viewport expands it to fill the full viewport area; double-clicking again returns to triplanar grid layout
   - **Window/Level:** right-click drag adjusts Window (width) and Level (center) — defaults: W=400 L=40 (soft tissue preset); bone preset W=2000 L=400; user can toggle presets
   - Crosshair lines drawn as thin colored overlays (axial=blue, coronal=green, sagittal=red)
   - HU value under cursor displayed in status bar
@@ -239,6 +239,7 @@
   - Use `vtkSmartVolumeMapper`
   - Default transfer function: bone white/grey, soft tissue semi-transparent
   - Mouse controls: left-click rotate, right-click zoom, middle-click pan
+  - Touchpad controls: 3-finger drag to rotate, 2-finger drag to translate
   - Add `vtkOrientationMarkerWidget` (axes indicator, bottom-left)
   - Optional axial/coronal/sagittal slice overlays
   - Camera reset button
@@ -293,8 +294,8 @@
 - **Status:** [x] DONE
 - **Goal:** Real-time threshold slider showing bone and soft tissue segmentation as user adjusts it.
 - **Technical Details:**
-  - Two sliders in right panel:
-    - Bone threshold: default 400–1100 HU
+  - Two sliders in right panel (and live threshold slider in 3D preview):
+    - Bone threshold: default 350–1000 HU
     - Soft tissue threshold: default -100 to 400 HU
   - Update `vtkMarchingCubes` iso-surface in real time (300ms debounce)
   - Bone = semi-transparent white mesh; Soft tissue = semi-transparent skin-tone mesh

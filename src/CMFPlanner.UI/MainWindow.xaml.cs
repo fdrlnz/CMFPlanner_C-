@@ -45,6 +45,12 @@ public partial class MainWindow : Window
     // Stores the confirmed final bone mesh (set after "Apply Segmentation" completes).
     private MeshData? _finalBoneMesh;
 
+    // Dental arch mesh visuals and data.
+    private ModelVisual3D? _upperArchVisual;
+    private ModelVisual3D? _lowerArchVisual;
+    private MeshData?      _upperArchData;
+    private MeshData?      _lowerArchData;
+
     // User-visible workflow steps (segmentation and segment ID run automatically).
     private static readonly (string Title, string Description)[] Steps =
     [
@@ -466,8 +472,30 @@ public partial class MainWindow : Window
             row.Children.Add(textStack);
             item.Child = row;
 
+            int stepIndex = i;
+            item.MouseLeftButtonDown += (_, _) => OnWorkflowStepClicked(stepIndex);
+
             WorkflowStepsPanel.Children.Add(item);
         }
+    }
+
+    private void OnWorkflowStepClicked(int stepIndex)
+    {
+        if (stepIndex == 1) // Dental Casts
+            ActivateDentalCastsPanel();
+    }
+
+    private void ActivateDentalCastsPanel()
+    {
+        MenuToggleProperties.IsChecked = true;
+        RightPanel.Visibility = Visibility.Visible;
+        RightColumn.Width     = new GridLength(250);
+
+        NoToolText.Visibility        = Visibility.Collapsed;
+        SegmentationPanel.Visibility = Visibility.Collapsed;
+        DentalCastsPanel.Visibility  = Visibility.Visible;
+
+        StatusActiveTool.Text = "Dental Casts";
     }
 
     // ── Status bar ─────────────────────────────────────────────────────────
@@ -524,6 +552,91 @@ public partial class MainWindow : Window
             indices.Add(idx);
 
         return geometry;
+    }
+
+    // ── Dental arch import ─────────────────────────────────────────────────
+
+    private async void BtnImportUpperArch_Click(object sender, RoutedEventArgs e)
+        => await ImportArchAsync(isUpper: true);
+
+    private async void BtnImportLowerArch_Click(object sender, RoutedEventArgs e)
+        => await ImportArchAsync(isUpper: false);
+
+    private async Task ImportArchAsync(bool isUpper)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title  = isUpper ? "Import Upper Dental Arch" : "Import Lower Dental Arch",
+            Filter = "STL Files (*.stl)|*.stl|All Files (*.*)|*.*",
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        string label = isUpper ? "Upper arch" : "Lower arch";
+
+        if (isUpper) { BtnImportUpperArch.IsEnabled = false; UpperArchStatus.Text = "Loading…"; }
+        else         { BtnImportLowerArch.IsEnabled = false; LowerArchStatus.Text = "Loading…"; }
+
+        try
+        {
+            string path = dialog.FileName;
+            var data = await Task.Run(() => StlReader.Read(path));
+
+            string info = $"{data.TriangleCount:N0} triangles  ·  {System.IO.Path.GetFileName(path)}";
+
+            if (isUpper) { _upperArchData = data; UpperArchStatus.Text = info; }
+            else         { _lowerArchData = data; LowerArchStatus.Text = info; }
+
+            DisplayArchMesh(data, isUpper);
+            StatusActiveTool.Text = $"{label} loaded";
+        }
+        catch (Exception ex)
+        {
+            if (isUpper) UpperArchStatus.Text = $"Error: {ex.Message}";
+            else         LowerArchStatus.Text = $"Error: {ex.Message}";
+            StatusActiveTool.Text = $"{label} import failed";
+        }
+        finally
+        {
+            if (isUpper) BtnImportUpperArch.IsEnabled = true;
+            else         BtnImportLowerArch.IsEnabled = true;
+        }
+    }
+
+    private void DisplayArchMesh(MeshData data, bool isUpper)
+    {
+        if (isUpper && _upperArchVisual != null)
+        {
+            Viewport3D.Children.Remove(_upperArchVisual);
+            _upperArchVisual = null;
+        }
+        else if (!isUpper && _lowerArchVisual != null)
+        {
+            Viewport3D.Children.Remove(_lowerArchVisual);
+            _lowerArchVisual = null;
+        }
+
+        if (data.VertexCount == 0) return;
+
+        var color = isUpper
+            ? Color.FromArgb(220, 255, 220, 100) // yellow
+            : Color.FromArgb(220, 255, 165,   0); // orange
+
+        var geometry = BuildGeometry(data);
+        var material = new DiffuseMaterial(new SolidColorBrush(color));
+        var model    = new GeometryModel3D(geometry, material) { BackMaterial = material };
+        var visual   = new ModelVisual3D { Content = model };
+
+        if (isUpper) _upperArchVisual = visual;
+        else         _lowerArchVisual = visual;
+
+        Viewport3D.Children.Add(visual);
+        ShowViewport3D();
+
+        if (!_hasZoomedToModel)
+        {
+            Viewport3D.ZoomExtents();
+            _hasZoomedToModel = true;
+        }
     }
 
     // ── Menu handlers ──────────────────────────────────────────────────────
