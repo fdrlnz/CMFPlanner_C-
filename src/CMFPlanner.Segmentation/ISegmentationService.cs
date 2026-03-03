@@ -19,13 +19,14 @@ public interface ISegmentationService
         CancellationToken ct = default);
 
     /// <summary>
-    /// Full-resolution pipeline: stride-1 marching cubes → Taubin smoothing (20 iterations)
-    /// → vertex-clustering decimation (bone ≤ 300 k triangles).
+    /// Full-resolution pipeline: optional HU clamping + marching cubes → optional noise-fragment
+    /// removal → Taubin smoothing → vertex-clustering decimation (bone ≤ 300 k triangles).
     /// Reports human-readable step descriptions via <paramref name="progress"/>.
     /// </summary>
     Task<MeshData> ApplyFinalSegmentationAsync(
         VolumeData volume,
         short boneThresholdHu,
+        bool metalArtifactReduction = true,
         IProgress<string>? progress = null,
         CancellationToken ct = default);
 }

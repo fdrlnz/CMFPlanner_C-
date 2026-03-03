@@ -29,4 +29,31 @@ public sealed class VolumeData
 
     public short GetVoxel(int x, int y, int z)
         => HuBuffer[(long)z * Rows * Columns + (long)y * Columns + x];
+
+    /// <summary>
+    /// Returns a new <see cref="VolumeData"/> with all HU values clamped to
+    /// <paramref name="maxHu"/>.  The original buffer is not mutated.
+    /// Metal implants produce HU spikes above 3000; clamping to 2500 removes them
+    /// without affecting real cortical bone (~400–1800 HU).
+    /// </summary>
+    public static VolumeData WithClampedHu(VolumeData source, short maxHu)
+    {
+        var buf = (short[])source.HuBuffer.Clone();
+        for (int i = 0; i < buf.Length; i++)
+            if (buf[i] > maxHu) buf[i] = maxHu;
+
+        return new VolumeData
+        {
+            HuBuffer   = buf,
+            Columns    = source.Columns,
+            Rows       = source.Rows,
+            SliceCount = source.SliceCount,
+            SpacingX   = source.SpacingX,
+            SpacingY   = source.SpacingY,
+            SpacingZ   = source.SpacingZ,
+            OriginX    = source.OriginX,
+            OriginY    = source.OriginY,
+            OriginZ    = source.OriginZ,
+        };
+    }
 }

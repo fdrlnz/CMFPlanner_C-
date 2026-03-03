@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using CMFPlanner.Core.Models;
@@ -69,6 +70,14 @@ public partial class TriplanarViewer : UserControl
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CMFPlanner", "zone_hint_dismissed");
 
+    // Arrow-key controls
+    private RotationZone _hoverZone  = RotationZone.Free;
+    private Key          _repeatKey  = Key.None;
+    private System.Windows.Threading.DispatcherTimer? _keyRepeatTimer;
+
+    // Arrow overlay elements
+    private TextBlock? _arrowA, _arrowB;
+
     // ── Public API ────────────────────────────────────────────────────────
 
     /// <summary>Fired when cursor moves over a slice; argument is the HU value under cursor.</summary>
@@ -95,21 +104,61 @@ public partial class TriplanarViewer : UserControl
         // Redraw the 2D grid overlay on the 3D preview when it resizes
         InfoBorder.SizeChanged += (_, _) => Draw3DGridOverlay();
 
-        // Escape collapses any expanded quadrant
+        // Keyboard handlers
         Loaded += (_, _) =>
         {
             var win = Window.GetWindow(this);
-            if (win != null) win.PreviewKeyDown += OnWindowKeyDown;
+            if (win != null)
+            {
+                win.PreviewKeyDown += OnWindowKeyDown;
+                win.PreviewKeyUp   += OnWindowKeyUp;
+            }
         };
     }
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        // Escape collapses any expanded quadrant
         if (e.Key == Key.Escape && _expanded != Quadrant.None)
         {
             CollapseAll();
             _expanded = Quadrant.None;
             e.Handled = true;
+            return;
+        }
+
+        // Arrow keys — only on initial press (our timer handles repeat; ignore OS auto-repeat)
+        if (e.IsRepeat) return;
+        if (!IsArrowKey(e.Key)) return;
+
+        if (_hoverZone is RotationZone.Yaw or RotationZone.Roll
+                       or RotationZone.PitchLeft or RotationZone.PitchRight
+            && Preview3D.Camera is PerspectiveCamera cam)
+        {
+            ApplyArrowKeyRotation(cam, _hoverZone, e.Key);
+
+            // Start 100 ms repeat timer
+            _repeatKey = e.Key;
+            _keyRepeatTimer?.Stop();
+            _keyRepeatTimer = new System.Windows.Threading.DispatcherTimer
+                { Interval = TimeSpan.FromMilliseconds(100) };
+            _keyRepeatTimer.Tick += (_, _) =>
+            {
+                if (Preview3D.Camera is PerspectiveCamera c)
+                    ApplyArrowKeyRotation(c, _hoverZone, _repeatKey);
+            };
+            _keyRepeatTimer.Start();
+            e.Handled = true;
+        }
+    }
+
+    private void OnWindowKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key == _repeatKey)
+        {
+            _keyRepeatTimer?.Stop();
+            _keyRepeatTimer = null;
+            _repeatKey = Key.None;
         }
     }
 
@@ -641,11 +690,17 @@ public partial class TriplanarViewer : UserControl
 
         if (!_3dDragging)
         {
-            // Hover — update cursor icon, floating label, and maybe show zone hint
+            // Hover — update cursor, floating label, arrow overlay, zone hint
             var hz = GetZone(pos);
             UpdateZoneCursor(hz);
             UpdateZoneLabel(hz, pos);
             MaybeShowZoneHint(pos);
+
+            if (hz != _hoverZone)
+            {
+                _hoverZone = hz;
+                ShowZoneArrows(hz);
+            }
             return;
         }
 
@@ -679,7 +734,9 @@ public partial class TriplanarViewer : UserControl
     private void Preview3DContainer_MouseLeave(object sender, MouseEventArgs e)
     {
         ZoneLabelBorder.Visibility = Visibility.Collapsed;
-        Preview3DContainer.Cursor  = null;   // revert to inherited default
+        Preview3DContainer.Cursor  = null;
+        _hoverZone = RotationZone.Free;
+        HideZoneArrows();
     }
 
     // ── 3D panel touch / precision-touchpad manipulation ─────────────────
@@ -783,9 +840,9 @@ public partial class TriplanarViewer : UserControl
         switch (zone)
         {
             case RotationZone.Yaw:
-                // Vertical drag → yaw around world Z axis (the "up" axis in this viewer)
-                // Z = superior-inferior in DICOM; rotating around it turns the nose left/right.
-                RotateCameraOnAxis(cam, new Vector3D(0, 0, 1), dy * yawSens);
+                // Horizontal drag → yaw around world Z (the "up" axis when UpDirection=(0,0,1))
+                // Sign matches FREE zone: -dx keeps drag-right = model-rotates-right convention.
+                RotateCameraOnAxis(cam, new Vector3D(0, 0, 1), -dx * yawSens);
                 break;
 
             case RotationZone.Roll:
@@ -839,10 +896,10 @@ public partial class TriplanarViewer : UserControl
     {
         string? label = zone switch
         {
-            RotationZone.Yaw        => "⟳ YAW",
-            RotationZone.Roll       => "⟳ ROLL",
-            RotationZone.PitchLeft  => "↕ PITCH",
-            RotationZone.PitchRight => "↕ PITCH",
+            RotationZone.Yaw        => "⟳ YAW  ← → 1°",
+            RotationZone.Roll       => "⟳ ROLL  ← → 1°",
+            RotationZone.PitchLeft  => "↕ PITCH  ↑ ↓ 1°",
+            RotationZone.PitchRight => "↕ PITCH  ↑ ↓ 1°",
             _                       => null,
         };
 
@@ -852,6 +909,112 @@ public partial class TriplanarViewer : UserControl
         ZoneLabelBorder.Visibility = Visibility.Visible;
         Canvas.SetLeft(ZoneLabelBorder, pos.X + 16);
         Canvas.SetTop(ZoneLabelBorder,  pos.Y - 8);
+    }
+
+    // ── Arrow key rotation ────────────────────────────────────────────────
+
+    private static bool IsArrowKey(Key k)
+        => k is Key.Left or Key.Right or Key.Up or Key.Down;
+
+    private void ApplyArrowKeyRotation(PerspectiveCamera cam, RotationZone zone, Key key)
+    {
+        var look  = cam.LookDirection; look.Normalize();
+        var up    = cam.UpDirection;   up.Normalize();
+        var right = Vector3D.CrossProduct(look, up); right.Normalize();
+
+        switch (zone)
+        {
+            case RotationZone.Yaw:
+                // LEFT/RIGHT arrow → yaw left/right (same sign as drag: -dx convention)
+                double yawDeg = key == Key.Left ? 1.0 : key == Key.Right ? -1.0 : 0;
+                if (yawDeg != 0) RotateCameraOnAxis(cam, new Vector3D(0, 0, 1), yawDeg);
+                break;
+
+            case RotationZone.Roll:
+                // LEFT/RIGHT arrow → roll left/right (same direction as vertical drag)
+                double rollDeg = key == Key.Left ? -1.0 : key == Key.Right ? 1.0 : 0;
+                if (rollDeg != 0) RotateCameraOnAxis(cam, look, rollDeg);
+                break;
+
+            case RotationZone.PitchLeft:
+            case RotationZone.PitchRight:
+                // UP/DOWN arrow → pitch up/down
+                double pitchDeg = key == Key.Up ? -1.0 : key == Key.Down ? 1.0 : 0;
+                if (pitchDeg != 0) RotateCameraOnAxis(cam, right, pitchDeg);
+                break;
+        }
+    }
+
+    // ── Zone arrow overlay ────────────────────────────────────────────────
+
+    private void ShowZoneArrows(RotationZone zone)
+    {
+        ZoneArrowCanvas.Children.Clear();
+        _arrowA = null;
+        _arrowB = null;
+
+        double w = Preview3DContainer.ActualWidth;
+        double h = Preview3DContainer.ActualHeight;
+        if (w <= 0 || h <= 0) return;
+
+        (string charA, string charB, double xA, double yA, double xB, double yB)? layout = zone switch
+        {
+            RotationZone.Yaw        => ("←", "→", w * 0.04,  h * 0.09, w * 0.28, h * 0.09),
+            RotationZone.Roll       => ("↺", "↻", w * 0.76,  h * 0.09, w * 0.91, h * 0.09),
+            RotationZone.PitchLeft  => ("↑", "↓", w * 0.14,  h * 0.27, w * 0.14, h * 0.41),
+            RotationZone.PitchRight => ("↑", "↓", w * 0.84,  h * 0.27, w * 0.84, h * 0.41),
+            _                       => null,
+        };
+
+        if (layout is null) return;
+
+        var (ca, cb, xA, yA, xB, yB) = layout.Value;
+        var brush = new SolidColorBrush(Color.FromArgb(153, 255, 255, 255)); // 60 % opacity
+
+        _arrowA = CreateArrowBlock(ca, brush);
+        _arrowB = CreateArrowBlock(cb, brush);
+
+        Canvas.SetLeft(_arrowA, xA); Canvas.SetTop(_arrowA, yA);
+        Canvas.SetLeft(_arrowB, xB); Canvas.SetTop(_arrowB, yB);
+
+        ZoneArrowCanvas.Children.Add(_arrowA);
+        ZoneArrowCanvas.Children.Add(_arrowB);
+
+        StartArrowPulse(_arrowA);
+        StartArrowPulse(_arrowB);
+    }
+
+    private void HideZoneArrows()
+    {
+        ZoneArrowCanvas.Children.Clear();
+        _arrowA = null;
+        _arrowB = null;
+    }
+
+    private static TextBlock CreateArrowBlock(string text, Brush brush) =>
+        new()
+        {
+            Text                  = text,
+            FontSize              = 32,
+            Foreground            = brush,
+            FontWeight            = FontWeights.Bold,
+            IsHitTestVisible      = false,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform       = new ScaleTransform(1.0, 1.0),
+        };
+
+    private static void StartArrowPulse(TextBlock tb)
+    {
+        if (tb.RenderTransform is not ScaleTransform scale) return;
+        var anim = new DoubleAnimation(1.0, 1.15,
+            new Duration(TimeSpan.FromMilliseconds(400)))
+        {
+            AutoReverse    = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase(),
+        };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
     }
 
     // ── Zone hint overlay ─────────────────────────────────────────────────

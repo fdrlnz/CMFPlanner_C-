@@ -24,8 +24,8 @@ public partial class MainWindow : Window
     private DicomVolume? _currentVolume;
     private VolumeData?  _volumeData;
 
-    // Bone threshold (Hounsfield Units), updated by live slider.
-    private short _boneThreshold = 350;
+    // Bone threshold (Hounsfield Units), updated by live slider. Mimics default: 490.
+    private short _boneThreshold = 490;
 
     // Cancellation source for the 300 ms debounced segmentation updates.
     private CancellationTokenSource? _segmentationCts;
@@ -98,7 +98,7 @@ public partial class MainWindow : Window
             }
             else if (preset == "Bone")
             {
-                _boneThreshold = 350;
+                _boneThreshold = 490;
                 ScheduleSegmentationUpdate();
             }
         };
@@ -325,6 +325,7 @@ public partial class MainWindow : Window
             var boneMesh = await _segmentationService.ApplyFinalSegmentationAsync(
                 _volumeData,
                 _boneThreshold,
+                ChkMetalArtifactReduction.IsChecked == true,
                 stepProgress,
                 ct);
 

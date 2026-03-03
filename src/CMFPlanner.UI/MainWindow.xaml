@@ -346,18 +346,18 @@
                                     </Grid.ColumnDefinitions>
                                     <Slider x:Name="BoneThresholdSlider"
                                             Grid.Column="0"
-                                            Minimum="-1000" Maximum="3000" Value="300"
+                                            Minimum="200" Maximum="1200" Value="490"
                                             IsSnapToTickEnabled="False"
                                             VerticalAlignment="Center"
                                             ValueChanged="BoneThresholdSlider_ValueChanged"/>
                                     <TextBlock x:Name="BoneThresholdLabel"
                                                Grid.Column="1"
-                                               Text="300 HU"
+                                               Text="490 HU"
                                                Foreground="#CCCCCC" FontSize="11"
                                                VerticalAlignment="Center"
                                                Margin="6,0,0,0"/>
                                 </Grid>
-                                <TextBlock Text="Typical range: 400–1800 HU"
+                                <TextBlock Text="Bone HU threshold (Mimics default: 490)"
                                            Foreground="#585858" FontSize="10"
                                            Margin="0,1,0,12"/>
 
@@ -366,6 +366,14 @@
                                            Foreground="#858585" FontSize="11"
                                            TextWrapping="Wrap"
                                            Margin="0,0,0,12"/>
+
+                                <!-- Metal artifact reduction toggle -->
+                                <CheckBox x:Name="ChkMetalArtifactReduction"
+                                          Content="Metal artifact reduction"
+                                          IsChecked="True"
+                                          Foreground="#CCCCCC"
+                                          Margin="0,0,0,10"
+                                          ToolTip="Clamps high-HU metal spikes and removes disconnected noise fragments. Recommended for scans with implants or plates."/>
 
                                 <!-- Apply button -->
                                 <Button x:Name="BtnApplySegmentation"

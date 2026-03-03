@@ -101,6 +101,208 @@ public static class MeshProcessor
         return newPos;
     }
 
+    // ── Connected-component noise removal ───────────────────────────────────
+
+    /// <summary>
+    /// Removes disconnected mesh fragments whose triangle count is smaller than
+    /// <paramref name="minFraction"/> × (largest component triangle count).
+    /// Uses Union-Find on vertex connectivity — O(V·α(V)) ≈ O(V).
+    /// Example: minFraction = 0.02 → any island &lt; 2 % of the largest bone island is discarded.
+    /// </summary>
+    public static MeshData RemoveSmallComponents(
+        MeshData input,
+        float minFraction   = 0.02f,
+        CancellationToken ct = default)
+    {
+        if (input.VertexCount == 0 || input.TriangleCount == 0) return input;
+
+        int   vCount  = input.VertexCount;
+        int[] indices = input.Indices;
+
+        // ── Union-Find with path-halving compression ──────────────────────────
+        var parent = new int[vCount];
+        for (int i = 0; i < vCount; i++) parent[i] = i;
+
+        int Find(int x)
+        {
+            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+            return x;
+        }
+        void Union(int a, int b)
+        {
+            a = Find(a); b = Find(b);
+            if (a != b) parent[a] = b;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Unite all vertices that share a triangle edge.
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            Union(indices[t], indices[t + 1]);
+            Union(indices[t], indices[t + 2]);
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Count triangles per component root.
+        var compTris = new Dictionary<int, int>();
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            int root = Find(indices[t]);
+            compTris.TryGetValue(root, out int cnt);
+            compTris[root] = cnt + 1;
+        }
+
+        if (compTris.Count <= 1) return input;  // already one piece — nothing to do
+
+        int maxTris = 0;
+        foreach (int v in compTris.Values) if (v > maxTris) maxTris = v;
+        int minTris = Math.Max(1, (int)(maxTris * minFraction));
+
+        // ── Collect kept triangles ────────────────────────────────────────────
+        var kept = new List<int>(indices.Length);
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            if (compTris[Find(indices[t])] >= minTris)
+            {
+                kept.Add(indices[t]);
+                kept.Add(indices[t + 1]);
+                kept.Add(indices[t + 2]);
+            }
+        }
+
+        if (kept.Count == indices.Length) return input;  // threshold removed nothing
+
+        // ── Compact: remove vertices no longer referenced ─────────────────────
+        int[] newIdx  = kept.ToArray();
+        var   used    = new bool[vCount];
+        foreach (int i in newIdx) used[i] = true;
+
+        var oldToNew = new int[vCount];
+        int newV = 0;
+        for (int v = 0; v < vCount; v++)
+            oldToNew[v] = used[v] ? newV++ : -1;
+
+        float[] srcPos = input.Positions;
+        float[] srcNrm = input.Normals;
+        var newPos = new float[newV * 3];
+        var newNrm = new float[newV * 3];
+
+        for (int v = 0; v < vCount; v++)
+        {
+            if (!used[v]) continue;
+            int nv = oldToNew[v], o = v * 3, no = nv * 3;
+            newPos[no]     = srcPos[o];     newPos[no + 1] = srcPos[o + 1]; newPos[no + 2] = srcPos[o + 2];
+            newNrm[no]     = srcNrm[o];     newNrm[no + 1] = srcNrm[o + 1]; newNrm[no + 2] = srcNrm[o + 2];
+        }
+
+        for (int i = 0; i < newIdx.Length; i++)
+            newIdx[i] = oldToNew[newIdx[i]];
+
+        return new MeshData(newPos, newNrm, newIdx);
+    }
+
+    /// <summary>
+    /// Keeps only the <paramref name="n"/> largest connected components (by triangle count)
+    /// and discards everything else.  Matches Mimics' "Largest shells: N" parameter.
+    /// Uses the same Union-Find algorithm as <see cref="RemoveSmallComponents"/>.
+    /// </summary>
+    public static MeshData KeepLargestNComponents(
+        MeshData input,
+        int n = 2,
+        CancellationToken ct = default)
+    {
+        if (input.VertexCount == 0 || input.TriangleCount == 0 || n <= 0) return input;
+
+        int   vCount  = input.VertexCount;
+        int[] indices = input.Indices;
+
+        // ── Union-Find ──────────────────────────────────────────────────────
+        var parent = new int[vCount];
+        for (int i = 0; i < vCount; i++) parent[i] = i;
+
+        int Find(int x)
+        {
+            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+            return x;
+        }
+        void Union(int a, int b)
+        {
+            a = Find(a); b = Find(b);
+            if (a != b) parent[a] = b;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            Union(indices[t], indices[t + 1]);
+            Union(indices[t], indices[t + 2]);
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Count triangles per component root.
+        var compTris = new Dictionary<int, int>();
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            int root = Find(indices[t]);
+            compTris.TryGetValue(root, out int cnt);
+            compTris[root] = cnt + 1;
+        }
+
+        if (compTris.Count <= n) return input;  // already within budget
+
+        // Find the N largest component roots.
+        var keptRoots = new HashSet<int>(
+            compTris.OrderByDescending(kv => kv.Value)
+                    .Take(n)
+                    .Select(kv => kv.Key));
+
+        // ── Collect kept triangles ──────────────────────────────────────────
+        var kept = new List<int>(indices.Length);
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            if (keptRoots.Contains(Find(indices[t])))
+            {
+                kept.Add(indices[t]);
+                kept.Add(indices[t + 1]);
+                kept.Add(indices[t + 2]);
+            }
+        }
+
+        if (kept.Count == indices.Length) return input;
+
+        // ── Compact: remove vertices no longer referenced ───────────────────
+        int[] newIdx = kept.ToArray();
+        var   used   = new bool[vCount];
+        foreach (int i in newIdx) used[i] = true;
+
+        var oldToNew = new int[vCount];
+        int newV = 0;
+        for (int v = 0; v < vCount; v++)
+            oldToNew[v] = used[v] ? newV++ : -1;
+
+        float[] srcPos = input.Positions;
+        float[] srcNrm = input.Normals;
+        var newPos = new float[newV * 3];
+        var newNrm = new float[newV * 3];
+
+        for (int v = 0; v < vCount; v++)
+        {
+            if (!used[v]) continue;
+            int nv = oldToNew[v], o = v * 3, no = nv * 3;
+            newPos[no]     = srcPos[o];     newPos[no + 1] = srcPos[o + 1]; newPos[no + 2] = srcPos[o + 2];
+            newNrm[no]     = srcNrm[o];     newNrm[no + 1] = srcNrm[o + 1]; newNrm[no + 2] = srcNrm[o + 2];
+        }
+
+        for (int i = 0; i < newIdx.Length; i++)
+            newIdx[i] = oldToNew[newIdx[i]];
+
+        return new MeshData(newPos, newNrm, newIdx);
+    }
+
     // ── Vertex-clustering decimation ─────────────────────────────────────────
 
     /// <summary>

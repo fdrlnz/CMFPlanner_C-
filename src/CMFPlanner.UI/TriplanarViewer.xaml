@@ -216,14 +216,14 @@
                                    FontSize="10" VerticalAlignment="Center"/>
                         <Slider x:Name="LiveBoneSlider"
                                 Grid.Column="1"
-                                Minimum="0" Maximum="1500" Value="350"
+                                Minimum="200" Maximum="1200" Value="490"
                                 VerticalAlignment="Center"
                                 IsSnapToTickEnabled="False"
                                 ValueChanged="LiveBoneSlider_ValueChanged"
-                                ToolTip="Drag to adjust bone threshold"/>
+                                ToolTip="Drag to adjust bone threshold (Mimics default: 490)"/>
                         <TextBlock x:Name="LiveBoneLabel"
                                    Grid.Column="2"
-                                   Text="350 HU"
+                                   Text="490 HU"
                                    Foreground="#CCCCCC" FontSize="10"
                                    VerticalAlignment="Center" Margin="8,0,0,0" Width="55"/>
                     </Grid>
@@ -275,6 +275,9 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                 </Grid>
+
+                <!-- Animated directional arrows — shown on zone hover -->
+                <Canvas x:Name="ZoneArrowCanvas" IsHitTestVisible="False"/>
 
                 <!-- Floating zone label — follows cursor, shown only inside named zones -->
                 <Canvas x:Name="ZoneLabelCanvas" IsHitTestVisible="False">
